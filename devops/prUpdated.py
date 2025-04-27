@@ -12,6 +12,7 @@ pr_number = os.environ.get('PR_NUMBER')
 github_repository = os.environ.get('GITHUB_REPOSITORY')
 github_token = os.environ.get('TOKEN_GITHUB')
 commit_id = os.environ.get('COMMIT_ID')
+artifiact_url = os.environ.get('ARTIFACT_URL')
 
 print(f"GitHub Repository: {github_repository}")
 print(f"GitHub Token: {github_token}")
@@ -51,6 +52,7 @@ summary = f"""
 ### 📌 Deployment Metadata
 - **Deployment ID:** `{deployment_id}`
 - **Deployment URL:** [View Deployment]({deploy_url})
+- **Artifact URL:** [View Artifact]({artifiact_url})
 """
 
 

@@ -66,8 +66,11 @@ jobs:
       - name: "Upload delta package as artifact"
         uses: actions/upload-artifact@v4
         with:
-          name: delta-package
+          name: ${{ github.event.pull_request.number }}
           path: delta-package.zip
+
+      - name: Set environment variable
+        run: echo "ARTIFACT_URL=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> $GITHUB_ENV
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
