@@ -3,7 +3,7 @@ import re
 import os
 
 # GitHub API information
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # Get the token from GitHub secrets
+TOKEN_GITHUB = os.getenv("TOKEN_GITHUB")  # Get the token from GitHub secrets
 REPO = os.getenv("GITHUB_REPOSITORY")  # In GitHub Actions, the repository is set as an environment variable
 PR_NUMBER = os.getenv("PR_NUMBER")  # You need to pass the PR number or get it from the event
 
@@ -14,7 +14,7 @@ print(f"GitHub API_URL: {API_URL}")
 
 # Request headers with GitHub token for authentication
 headers = {
-    # "Authorization": f"Bearer {GITHUB_TOKEN}",
+     "Authorization": f"Bearer {TOKEN_GITHUB}",
     "Accept": "application/vnd.github.full+json",
 }
 
