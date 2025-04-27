@@ -26,6 +26,7 @@ try:
     with open(deployment_result_file, "r") as file:
         deploy_result = json.load(file)
         print("✅ Deployment result loaded.")
+        print(json.dumps(deploy_result, indent=2))
 except FileNotFoundError:
     print(f"{CYAN_BG}{RED_TEXT}Error: File {deployment_result_file} not found.{RESET}")
     exit(1)
