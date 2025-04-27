@@ -1,11 +1,11 @@
 name: Release Validation in Prod
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches:
-      - main
-
+  workflow_call:
+    inputs:
+      config-path:
+        required: true
+        type: string
 jobs:
   validate-build:
     runs-on: ubuntu-latest
