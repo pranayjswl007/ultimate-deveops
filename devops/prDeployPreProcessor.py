@@ -35,7 +35,7 @@ if response.status_code == 200:
         print(latest_comment)
 
         # Extract Deployment ID using regex
-        deployment_id_match = re.search(r"Deployment ID:\s*(\S+)", latest_comment)
+        deployment_id_match = re.search(r"Deployment ID:**\s*(\S+)", latest_comment)
         if deployment_id_match:
             deployment_id = deployment_id_match.group(1)
             print(f"Deployment ID: {deployment_id}")
@@ -45,7 +45,7 @@ if response.status_code == 200:
             print("Deployment ID not found")
 
         # Extract Artifact URL using regex
-        artifact_url_match = re.search(r"Artifact URL:\s*(\S+)", latest_comment)
+        artifact_url_match = re.search(r"Artifact URL:**\s*(\S+)", latest_comment)
         if artifact_url_match:
             artifact_url = artifact_url_match.group(1)
             print(f"Artifact URL: {artifact_url}")
