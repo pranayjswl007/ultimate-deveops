@@ -8,7 +8,7 @@ REPO = os.getenv("GITHUB_REPOSITORY")  # In GitHub Actions, the repository is se
 PR_NUMBER = os.getenv("PR_NUMBER")  # You need to pass the PR number or get it from the event
 
 # GitHub API URL
-API_URL = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
+API_URL = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
 
 # Request headers with GitHub token for authentication
 headers = {
