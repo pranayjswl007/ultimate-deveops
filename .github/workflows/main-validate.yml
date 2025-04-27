@@ -6,13 +6,14 @@ on:
       config-path:
         required: true
         type: string
-    secrets:
-      SF_AUTH_URL: # <--- declare your secret here
+      environment-name: # <--- define a new input
         required: true
+        type: string
+
 jobs:
   validate-build:
     runs-on: ubuntu-latest
-    environment: ${{ secrets.environment }}
+    name: ${{ inputs.environment-name }}
     steps:
       - uses: actions/setup-node@v3
         with:
