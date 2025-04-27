@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import datetime
 
 GREEN_TEXT = '\033[32m'
 YELLOW_TEXT = '\033[33m'
@@ -42,13 +43,17 @@ details = result.get("details", {})
 deployment_id = result.get("id", "N/A")
 deploy_url = result.get("deployUrl", "")
 
+
 # --- Deployment Summary ---
 summary = f"""
 ### 🚀 Deployment Summary
 - **Status:** {"✅ Success" if result.get("success") else "❌ Failed"}
+- **Start Time:** {result.get("startDate", "N/A")}
+- **End Time:** {result.get("completedDate", "N/A")}
 - **Components Deployed:** {result.get("numberComponentsDeployed", 0)} / {result.get("numberComponentsTotal", 0)}
 - **Component Errors:** {result.get("numberComponentErrors", 0)}
 - **Tests Run:** {result.get("numberTestsCompleted", 0)} / {result.get("numberTestsTotal", 0)}
+
 
 ### 📌 Deployment Metadata
 - **Deployment ID:** `{deployment_id}`
