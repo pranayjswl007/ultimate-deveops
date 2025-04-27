@@ -90,3 +90,8 @@ jobs:
       - name: "PR Post Processing test"
         run: |
           python3 devops/prDeployPreProcessor.py
+
+      - name: "PR Post Processing test"
+        run: |
+          echo $ARTIFACT_URL
+          echo $DEPLOYMENT_ID
