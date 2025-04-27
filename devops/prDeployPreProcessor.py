@@ -10,10 +10,12 @@ PR_NUMBER = os.getenv("PR_NUMBER")  # You need to pass the PR number or get it f
 # GitHub API URL
 API_URL = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
 
+print(f"GitHub API_URL: {API_URL}")
+
 # Request headers with GitHub token for authentication
 headers = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github.v3+json",
+    # "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.full+json",
 }
 
 # Fetch all comments on the PR
