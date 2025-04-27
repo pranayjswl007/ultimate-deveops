@@ -6,6 +6,9 @@ on:
       config-path:
         required: true
         type: string
+    secrets:
+      SF_AUTH_URL: # <--- declare your secret here
+        required: true
 jobs:
   validate-build:
     runs-on: ubuntu-latest
