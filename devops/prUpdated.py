@@ -56,7 +56,7 @@ summary = f"""
 
 
 ### 📌 Deployment Metadata
-- **Deployment ID:** `{deployment_id}`
+- **Deployment ID:** {deployment_id}
 - **Deployment URL:** [View Deployment]({deploy_url})
 - **Artifact URL:** [View Artifact]({artifact_url})
 """

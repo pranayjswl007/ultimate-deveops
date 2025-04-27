@@ -44,7 +44,7 @@ if response.status_code == 200:
         else:
             print("Deployment ID not found")
 
-        # Extract Artifact URL using regex
+        # Regex pattern to match the Artifact URL
         artifact_url_match = re.search(r"Artifact URL:\s*\[.*?\]\((\S+)\)", latest_comment)
         if artifact_url_match:
             artifact_url = artifact_url_match.group(1)
