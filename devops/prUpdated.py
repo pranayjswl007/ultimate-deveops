@@ -89,7 +89,7 @@ for cf in component_failures:
     comments.append(comment)
 
 # --- Determine Review Event ---
-event = "APPROVE" if result.get("success") else "REQUEST_CHANGES"
+event = "COMMENT" if result.get("success") else "REQUEST_CHANGES"
 
 # --- GitHub API: PR Review ---
 headers = {
