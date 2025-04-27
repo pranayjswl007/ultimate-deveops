@@ -12,7 +12,7 @@ on:
 jobs:
   validate-build:
     runs-on: ubuntu-latest
-    environment: ${{ secrets.evironment }}
+    environment: ${{ secrets.environment }}
     steps:
       - uses: actions/setup-node@v3
         with:
