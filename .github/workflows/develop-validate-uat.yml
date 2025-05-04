@@ -66,7 +66,7 @@ jobs:
           echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r ./devops/requirements.txt
 
       - name: "post comment to github"
         run: |
