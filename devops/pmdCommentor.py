@@ -76,6 +76,8 @@ with tqdm(total=len(comments), desc="Posting Comments", ncols=80) as pbar:
         response = requests.post(api_url, json=comment, headers=headers)
         if response.status_code == 201:
             success_count += 1
+            if(success_count % 10 == 0):
+               time.sleep(1)
         else:
             console.print(f"[red]❌ Failed to create comment[/red] [bold](Status {response.status_code})[/bold]")
             console.print_json(data=response.json())
