@@ -34,7 +34,7 @@ jobs:
 
       - name: "Run Jest tests"
         run: |
-          npm install
+          npm install --no-optional
           npm install @salesforce/sfdx-lwc-jest --save-dev
           npm run test:unit
 
