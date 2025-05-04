@@ -1,21 +1,26 @@
 name: PR Validation in uat
 on:
-  pull_request:
-    branches:
-      - develop
+  workflow_call:
+    inputs:
+      config-path:
+        required: true
+        type: string
+      environment-name: # <--- define a new input
+        required: true
+        type: string
 
 jobs:
   validate-build:
-    name: PR Validation on uat (No Deploy)
     runs-on: ubuntu-latest
-    environment: uat
+    environment:
+      name: ${{ inputs.environment-name }}
     steps:
       - uses: actions/setup-node@v3
         with:
           node-version: "18"
 
       - name: "Checkout source code"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
