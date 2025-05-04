@@ -1,96 +1,87 @@
 import os
 import json
+import requests
+from tqdm import tqdm
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
 
-import requests  # Add this import
+# Rich console
+console = Console()
 
-GREEN_TEXT = '\033[32m'
-YELLOW_TEXT = '\033[33m'
-RED_TEXT = '\033[31m'
-BOLD_TEXT = '\033[1m'
-RESET = '\033[0m'
-CYAN_BG = '\033[46m'
-
-
-
+# Environment variables
 pr_number = os.environ.get('PR_NUMBER')
 github_repository = os.environ.get('GITHUB_REPOSITORY')
 github_token = os.environ.get('TOKEN_GITHUB')
 commit_id = os.environ.get('COMMIT_ID')
 
+# Print environment info
+console.rule("[bold cyan]GitHub Context")
+console.print(f"[bold green]Repository:[/bold green] {github_repository}")
+console.print(f"[bold green]PR Number:[/bold green] {pr_number}")
+console.print(f"[bold green]Commit ID:[/bold green] {commit_id}")
 
-print(f"GitHub Repository: {github_repository}")
-print(f"GitHub Token: {github_token}")
-print(f"PR Number: {pr_number}")
-print(f"commit_id: {commit_id}")
-
-# Get the path to the PMD violations file
+# PMD results file
 pmd_violations_file = "apexScanResults.json"
 
-# Read the PMD violations file as JSON
+# Load PMD results
 try:
     with open(pmd_violations_file, "r") as file:
         pmd_violations = json.load(file)
-        print(json.dumps(pmd_violations))
+        console.print(f"[bold green]✅ Loaded {len(pmd_violations)} file(s) with violations.[/bold green]")
 except FileNotFoundError:
-    print(f"{CYAN_BG}{RED_TEXT}Error: The file {pmd_violations_file} was not found.{RESET}")
+    console.print(f"[bold red on cyan]❌ Error: The file '{pmd_violations_file}' was not found.[/bold red on cyan]")
     exit(1)
 except json.JSONDecodeError:
-    print(f"{CYAN_BG}{RED_TEXT}Error: The file {pmd_violations_file} is not a valid JSON file.{RESET}")
+    console.print(f"[bold red on cyan]❌ Error: Invalid JSON in '{pmd_violations_file}'.[/bold red on cyan]")
     exit(1)
 
-# Create comments for each violation
+# Prepare comments
 comments = []
 for violation in pmd_violations:
-    
-    # Get the file path and line number of the violation
-    file_path = violation["fileName"]
-    print("file path is ")
-    print(file_path)
-    file_path = file_path.split("changed-sources/")[1]
-    print(f"File Path: {file_path}")
-    
-    for vo in violation['violations']:
-        line_number = vo["line"]
-        endLine = vo["endLine"]
-        if endLine == line_number:
-            endLine = line_number + 1
+    try:
+        file_path = violation["fileName"].split("changed-sources/")[1]
+    except IndexError:
+        file_path = violation["fileName"]
 
-    # Create a comment for the violation
+    for vo in violation["violations"]:
+        line_number = vo["line"]
+        end_line = vo.get("endLine", line_number)
+        if end_line == line_number:
+            end_line = line_number + 1
+
         comment = {
             "path": file_path,
             "line": line_number,
-            "side": "RIGHT", 
+            "side": "RIGHT",
             "commit_id": commit_id,
             "body": f"PMD Violation: {vo['message']}"
-            
-
         }
         comments.append(comment)
-    
 
-print(json.dumps(comments))
-# Set the headers for the API request
+console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(comments)} inline comment(s)."))
+
+# GitHub API setup
 headers = {
     "Authorization": f"Bearer {github_token}",
     "Accept": "application/vnd.github.v3+json"
 }
-
-# Set the GitHub API endpoint
 api_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
 
+# Send comments with progress
+console.rule("[bold cyan]Submitting Review Comments")
+success_count = 0
+with tqdm(total=len(comments), desc="Posting Comments", ncols=80) as pbar:
+    for comment in comments:
+        response = requests.post(api_url, json=comment, headers=headers)
+        if response.status_code == 201:
+            success_count += 1
+        else:
+            console.print(f"[red]❌ Failed to create comment[/red] [bold](Status {response.status_code})[/bold]")
+            console.print_json(data=response.json())
+            exit(1)
+        pbar.update(1)
 
-
-# Send a POST request to create the comments
-for comment in comments:
-    print(f"Creating comment: {comment}")
-    response = requests.post(api_url, json=comment, headers=headers)
-
-    # Check the response status code
-    if response.status_code == 201:
-        print("Comment created successfully.")
-    else:
-        print(f"{CYAN_BG}{RED_TEXT}Failed to create comment. Status code: {response.status_code}{RESET}")
-        print(f"{CYAN_BG}{RED_TEXT}Response: {response.json()}{RESET}")
-        exit(1)
-
-print(f"{GREEN_TEXT} PMD Commentor step executed successfully")
+# Summary
+console.rule("[bold green]✅ PMD Commentor Summary")
+console.print(f"[bold green]🎉 {success_count} comment(s) successfully posted![/bold green]")
