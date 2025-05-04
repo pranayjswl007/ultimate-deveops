@@ -2,9 +2,7 @@ name: PR Validation in uat
 on:
   pull_request:
     branches:
-
       - develop
-
 
 jobs:
   validate-build:
@@ -14,27 +12,29 @@ jobs:
     steps:
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: "18"
 
-      - name: 'Checkout source code'
+      - name: "Checkout source code"
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: 'Install Salesforce CLI'
+      - name: "Install Salesforce CLI"
         run: |
           npm install @salesforce/cli --global
 
-
-      - name: 'Installing sfdx git delta'
+      - name: "Installing sfdx git delta"
         run: |
           echo y | sf plugins install sfdx-git-delta
 
-       # Scan code
-      
-    
+      - name: "Run Jest tests"
+        run: |
 
-      - name: 'Create delta packages for new, modified or deleted metadata'
+          npm run test:unit
+
+        # Scan code
+
+      - name: "Create delta packages for new, modified or deleted metadata"
         run: |
           mkdir changed-sources
           sf sgd source delta \
@@ -45,46 +45,43 @@ jobs:
             --source-dir force-app/
 
       - name: "Scan code"
-        run:  sf scanner run --format json --target 'changed-sources' --pmdconfig "devops/masterRuleset.xml" -e pmd --outfile "apexScanResults.json" || exit 1
-     
+        run: sf scanner run --format json --target 'changed-sources' --pmdconfig "devops/masterRuleset.xml" -e pmd --outfile "apexScanResults.json" || exit 1
+
       - name: Set Environment Variables
         run: |
-                echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-                echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
-                echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
-                echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
-        
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
+          echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
+
       - name: "post comment to github"
         run: |
-                python3 devops/pmdCommentor.py
+          python3 devops/pmdCommentor.py
 
-      - name: 'Zip delta package'
+      - name: "Zip delta package"
         run: |
           zip -r delta-package.zip changed-sources
 
-      - name: 'Upload delta package as artifact'
+      - name: "Upload delta package as artifact"
         uses: actions/upload-artifact@v4
         with:
           name: delta-package
           path: delta-package.zip
 
-      - name: 'Authenticate using SFDX_AUTH_URL'
-        run: | 
-          echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
-     
-
-      - name: 'Validate only deployment - run all tests'
+      - name: "Authenticate using SFDX_AUTH_URL"
         run: |
-             sf project deploy start \
-              --manifest "changed-sources/package/package.xml" \
-              --test-level RunLocalTests \
-              --dry-run \
-              --pre-destructive-changes "changed-sources/destructiveChanges/package.xml" \
-              --ignore-warnings \
-              --json > deploymentResult.json || true 
+          echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
+
+      - name: "Validate only deployment - run all tests"
+        run: |
+          sf project deploy start \
+           --manifest "changed-sources/package/package.xml" \
+           --test-level RunLocalTests \
+           --dry-run \
+           --pre-destructive-changes "changed-sources/destructiveChanges/package.xml" \
+           --ignore-warnings \
+           --json > deploymentResult.json || true
 
       - name: "Update the PR body with the latest content to allow quick validation and summary"
         run: |
-            python3 devops/prUpdated.py 
-
-         
+          python3 devops/prUpdated.py
