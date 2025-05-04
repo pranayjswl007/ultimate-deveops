@@ -65,6 +65,9 @@ jobs:
           echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
           echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
 
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
       - name: "post comment to github"
         run: |
           python3 devops/pmdCommentor.py
