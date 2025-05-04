@@ -83,6 +83,9 @@ jobs:
            --ignore-conflicts \
            --json > deploymentResult.json || true
 
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
       - name: "Update the PR body with the latest content to allow quick validation and summary"
         run: |
           python3 devops/prUpdated.py

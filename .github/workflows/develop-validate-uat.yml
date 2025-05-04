@@ -91,6 +91,7 @@ jobs:
            --dry-run \
            --pre-destructive-changes "changed-sources/destructiveChanges/package.xml" \
            --ignore-warnings \
+           --ignore-conflicts \
            --json > deploymentResult.json || true
 
       - name: "Update the PR body with the latest content to allow quick validation and summary"
