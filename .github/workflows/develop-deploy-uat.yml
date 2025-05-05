@@ -83,6 +83,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           artifact-ids: $ARTIFACT_ID
+          repository: $GITHUB_REPOSITORY
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           path: delta-package.zip
 
       - name: "Unzip delta package"
