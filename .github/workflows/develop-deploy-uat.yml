@@ -74,7 +74,7 @@ jobs:
       - name: "Check if quick deploy was successful"
         id: check-quick-deploy
         run: |
-          python3 devops/quickDeploymentResultCheck.py
+          python3 devops/quickDeploymentResultChecker.py
 
       - name: Deploy delta package - run all tests
         id: artifact-upload-step
