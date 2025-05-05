@@ -38,11 +38,7 @@ jobs:
           echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
 
       - name: "Install Salesforce CLI"
-        run: npm install --global @salesforce/cli
-
-      - name: "Installing sfdx git delta"
-        run: |
-          echo y | sf plugins install sfdx-git-delta
+        run: npm install @salesforce/cli --global
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
