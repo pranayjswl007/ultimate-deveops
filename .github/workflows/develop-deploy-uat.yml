@@ -63,8 +63,6 @@ jobs:
           sf project deploy quick --job-id ${DEPLOYMENT_ID} \
             --wait 60 \
             --verbose \
-            --ignore-warnings \
-            --ignore-conflicts \
             --json > deploymentResult.json || true
 
       - name: "Check if quick deploy was successful"
