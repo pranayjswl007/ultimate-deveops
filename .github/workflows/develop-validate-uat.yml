@@ -84,7 +84,9 @@ jobs:
           path: delta-package.zip
 
       - name: Set environment variable
-        run: echo "ARTIFACT_URL=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> $GITHUB_ENV
+        run: |
+          echo "ARTIFACT_URL=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> $GITHUB_ENV
+          echo "ARTIFACT_ID=${{ steps.artifact-upload-step.outputs.artifact-id }}" >> $GITHUB_ENV
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
@@ -110,7 +112,8 @@ jobs:
         run: |
           python3 devops/prDeployPreProcessor.py
 
-      - name: "PR Post Processing test222"
+      - name: "PR Post Processing Echo Deployment Id"
         run: |
+          echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
           echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
           echo $DEPLOYMENT_ID

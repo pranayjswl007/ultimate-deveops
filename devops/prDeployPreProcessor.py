@@ -56,6 +56,17 @@ if response.status_code == 200:
                 f.write(f"ARTIFACT_URL={artifact_url}\n")
         else:
             print("Artifact URL not found")
+
+        # Regex pattern to match the Artifact ID
+        artifact_id_match = re.search(r"\*\*Artifact ID:\*\*\s([^\s]+)", latest_comment)
+        if artifact_id_match:
+            artifact_id = artifact_id_match.group(1)
+            print(f"Artifact ID: {artifact_id}")
+            # Set Artifact ID as an environment variable
+            with open(env_file, "a") as f:
+                f.write(f"ARTIFACT_ID={artifact_id}\n")
+        else:
+            print("Artifact ID not found")
     else:
         print("No comment from github-actions[bot] found.")
 else:

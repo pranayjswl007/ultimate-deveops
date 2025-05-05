@@ -62,7 +62,6 @@ summary = f"""
 - **Deployment URL:** [View Deployment]({deploy_url})
 - **Artifact URL:** {artifact_url})
 - **Artifact ID:** {artifact_id})
-
 """
 
 
