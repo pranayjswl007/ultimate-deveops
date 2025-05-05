@@ -55,16 +55,13 @@ jobs:
       - name: "PR Post Processing Echo Deployment Id"
         run: |
           echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
-          echo $DEPLOYMENT_ID
           echo "ARTIFACT_URL=${{ steps.pr-post-processing.outputs.ARTIFACT_URL }}" >> $GITHUB_ENV
-          echo $ARTIFACT_URL
           echo "ARTIFACT_ID=${{ steps.pr-post-processing.outputs.ARTIFACT_ID }}" >> $GITHUB_ENV
-          echo $ARTIFACT_ID
 
       - name: "Run quick deploy"
         if: ${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID != 'null' }}
         run: |
-          sf project deploy quick --job-id "${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" \
+          sf project deploy quick --job-id "$DEPLOYMENT_ID" \
             --wait 60 \
             --verbose \
             --ignore-warnings \
