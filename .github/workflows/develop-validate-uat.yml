@@ -106,11 +106,11 @@ jobs:
           python3 devops/prUpdated.py
 
       - name: "PR Post Processing test"
+        id: pr-post-processing
         run: |
           python3 devops/prDeployPreProcessor.py
 
       - name: "PR Post Processing test222"
-        id: pr-post-processing
         run: |
-          run: echo "DEPLOYMENT_ID=${{ steps.artifact-upload-step.outputs.pr-post-processing }}" >> $GITHUB_ENV
+          run: echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
           echo $DEPLOYMENT_ID
