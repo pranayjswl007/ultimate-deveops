@@ -70,18 +70,14 @@ jobs:
         run: |
           python3 devops/quickDeploymentResultChecker.py
 
-      - name: Authenticate GitHub CLI
-        run: |
-          gh auth login --with-token < ${{ secrets.GITHUB_TOKEN }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Deploy delta package - run all tests
         id: artifact-upload-step
         if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
         run: |
           gh run download ${{ env.ARTIFACT_ID }} \
             --repo "${{ github.repository }}" \
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: "Unzip delta package"
         if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
