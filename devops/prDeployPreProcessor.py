@@ -14,7 +14,7 @@ print(f"GitHub API_URL: {API_URL}")
 
 # Request headers with GitHub token for authentication
 headers = {
-     "Authorization": f"Bearer {TOKEN_GITHUB}",
+    "Authorization": f"Bearer {TOKEN_GITHUB}",
     "Accept": "application/vnd.github.full+json",
 }
 
@@ -35,7 +35,7 @@ if response.status_code == 200:
         print(latest_comment)
 
         # Extract Deployment ID using regex
-        deployment_id_match = re.search(r"**Deployment ID:**\s([A-Za-z0-9]+)", latest_comment)
+        deployment_id_match = re.search(r"\*\*Deployment ID:\*\*\s([A-Za-z0-9]+)", latest_comment)
         if deployment_id_match:
             deployment_id = deployment_id_match.group(1)
             print(f"Deployment ID: {deployment_id}")
@@ -45,7 +45,7 @@ if response.status_code == 200:
             print("Deployment ID not found")
 
         # Regex pattern to match the Artifact URL
-        artifact_url_match = re.search(r"**Artifact URL:**\s([A-Za-z0-9]+)", latest_comment)
+        artifact_url_match = re.search(r"\*\*Artifact URL:\*\*\s([^\s]+)", latest_comment)
         if artifact_url_match:
             artifact_url = artifact_url_match.group(1)
             print(f"Artifact URL: {artifact_url}")
