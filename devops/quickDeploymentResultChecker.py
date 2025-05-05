@@ -15,6 +15,8 @@ github_token = os.environ.get('TOKEN_GITHUB')
 commit_id = os.environ.get('COMMIT_ID')
 artifact_url = os.environ.get('ARTIFACT_URL')
 artifact_id = os.environ.get('ARTIFACT_ID')
+env_file = os.getenv('GITHUB_ENV')  # Get the path of the runner file
+
 
 
 print(f"GitHub Repository: {github_repository}")
@@ -38,4 +40,9 @@ except FileNotFoundError:
 except json.JSONDecodeError:
     print(f"{CYAN_BG}{RED_TEXT}Error: Invalid JSON in {deployment_result_file}.{RESET}")
     exit(1)
+
+result = deploy_result.get("result", {})
+with open(env_file, "a") as f:
+    f.write(f"QUICK_DEPLOY_STATUS={result.success}\n")
+
 
