@@ -42,7 +42,7 @@ if response.status_code == 200:
             print(f"Deployment ID: {deployment_id}")
             # Set Deployment ID as an environment variable
             with open(env_file, "a") as f:
-                f.write(f"DEPLOYMENTID={deployment_id}\n")
+                f.write(f"DEPLOYMENT_ID={deployment_id}\n")
         else:
             print("Deployment ID not found")
 
