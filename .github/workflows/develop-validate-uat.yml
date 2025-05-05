@@ -112,5 +112,5 @@ jobs:
 
       - name: "PR Post Processing test222"
         run: |
-          run: echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
+          echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
           echo $DEPLOYMENT_ID
