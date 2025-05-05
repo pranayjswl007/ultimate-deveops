@@ -44,9 +44,9 @@ jobs:
         run: |
           echo y | sf plugins install sfdx-git-delta
 
-      - name: Authenticate to Salesforce
+      - name: "Authenticate using SFDX_AUTH_URL"
         run: |
-          echo "${{ secrets.SF_AUTH_URL }}" | sf org login sfdx-url --sfdx-url-stdin -d -s
+          echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
 
       - name: "PR Post Processing test"
         id: pr-post-processing
