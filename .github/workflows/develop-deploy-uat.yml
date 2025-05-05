@@ -75,8 +75,8 @@ jobs:
         if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: ${ARTIFACT_ID}
-          repository: ${GITHUB_REPOSITORY}
+          artifact-ids: ${{env.ARTIFACT_ID}}
+          repository: ${{env.GITHUB_REPOSITORY}}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: delta-package.zip
 
