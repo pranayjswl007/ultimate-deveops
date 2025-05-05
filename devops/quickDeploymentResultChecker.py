@@ -42,7 +42,8 @@ except json.JSONDecodeError:
     exit(1)
 
 result = deploy_result.get("result", {})
+success = result.get("success", 'false')
 with open(env_file, "a") as f:
-    f.write(f"QUICK_DEPLOY_STATUS={result.success}\n")
+    f.write(f"QUICK_DEPLOY_STATUS={success}\n")
 
 
