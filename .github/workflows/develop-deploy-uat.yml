@@ -72,7 +72,7 @@ jobs:
 
       - name: Deploy delta package - run all tests
         id: artifact-upload-step
-        if: ${{ steps.check-quick-deploy.outputs.QUICK_DEPLOY_STATUS == 'false' }}
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
         uses: actions/download-artifact@v4
         with:
           artifact-ids: ${ARTIFACT_ID}
@@ -81,7 +81,7 @@ jobs:
           path: delta-package.zip
 
       - name: "Unzip delta package"
-        if: ${{ steps.check-quick-deploy.outputs.QUICK_DEPLOY_STATUS == 'false' }}
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
         run: |
           unzip -o delta-package.zip
           ls -R changed-sources/
@@ -89,7 +89,7 @@ jobs:
           ls -R changed-sources/
 
       - name: "Deploy delta package - run all tests"
-        if: ${{ steps.check-quick-deploy.outputs.QUICK_DEPLOY_STATUS == 'false' }}
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
         run: |
           sf project deploy start \
             --manifest "changed-sources/package/package.xml" \
