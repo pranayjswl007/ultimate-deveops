@@ -13,7 +13,8 @@ on:
 jobs:
   deploy-to-uat:
     runs-on: ubuntu-latest
-    name: ${{ inputs.environment-name }}
+    environment:
+      name: ${{ inputs.environment-name }}
 
     steps:
       - uses: actions/setup-node@v3
@@ -27,6 +28,7 @@ jobs:
 
       - name: Set Environment Variables
         run: |
+          echo "environment-name=${{ inputs.environment-name }}" 
           echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
           echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
