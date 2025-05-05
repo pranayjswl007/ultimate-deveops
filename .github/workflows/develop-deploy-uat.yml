@@ -64,7 +64,7 @@ jobs:
       - name: "Run quick deploy"
         if: ${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID != 'null' }}
         run: |
-          sf project deploy quick --job-id "$DEPLOYMENT_ID" \
+          sf project deploy quick --job-id "${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" \
             --wait 60 \
             --verbose \
             --ignore-warnings \
