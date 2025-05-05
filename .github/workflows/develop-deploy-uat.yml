@@ -59,9 +59,9 @@ jobs:
           echo "ARTIFACT_ID=${{ steps.pr-post-processing.outputs.ARTIFACT_ID }}" >> $GITHUB_ENV
 
       - name: "Run quick deploy"
-        if: ${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}
+
         run: |
-          sf project deploy quick --job-id ${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID}}\
+          sf project deploy quick --job-id $DEPLOYMENT_ID\
             --wait 60 \
             --verbose \
             --ignore-warnings \
