@@ -6,8 +6,7 @@ import os
 TOKEN_GITHUB = os.getenv("TOKEN_GITHUB")  # Get the token from GitHub secrets
 REPO = os.getenv("GITHUB_REPOSITORY")  # In GitHub Actions, the repository is set as an environment variable
 PR_NUMBER = os.getenv("PR_NUMBER")  # You need to pass the PR number or get it from the event
-env_file = os.getenv('GITHUB_ENV') # Get the path of the runner file
-
+env_file = os.getenv('GITHUB_ENV')  # Get the path of the runner file
 
 # GitHub API URL
 API_URL = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
@@ -42,8 +41,8 @@ if response.status_code == 200:
             deployment_id = deployment_id_match.group(1)
             print(f"Deployment ID: {deployment_id}")
             # Set Deployment ID as an environment variable
-            with open(env_file, "a") as env_file:
-                env_file.write("DEPLOYMENTID="+deployment_id)
+            with open(env_file, "a") as f:
+                f.write(f"DEPLOYMENTID={deployment_id}\n")
         else:
             print("Deployment ID not found")
 
@@ -53,8 +52,8 @@ if response.status_code == 200:
             artifact_url = artifact_url_match.group(1)
             print(f"Artifact URL: {artifact_url}")
             # Set Artifact URL as an environment variable
-            with open(env_file, "a") as env_file:
-                env_file.write("ARTIFACT_URL="+artifact_url)
+            with open(env_file, "a") as f:
+                f.write(f"ARTIFACT_URL={artifact_url}\n")
         else:
             print("Artifact URL not found")
     else:
