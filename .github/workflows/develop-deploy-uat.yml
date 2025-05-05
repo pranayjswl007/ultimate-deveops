@@ -25,11 +25,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: "Checkout devops folder from the called repository"
-        run: |
-          git clone --depth 1 --branch main https://github.com/pranayjswl007/ultimate-devops.git
-          cp -r ultimate-devops/devops/ ./devops  # Copy just the devops folder from the called repo
-
       - name: Set Environment Variables
         run: |
           echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
@@ -37,11 +32,17 @@ jobs:
           echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
           echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
 
+      - name: "Checkout devops folder from the called repository"
+        run: |
+          git clone --depth 1 --branch main https://github.com/pranayjswl007/ultimate-devops.git
+          cp -r ultimate-devops/devops/ ./devops  # Copy just the devops folder from the called repo
+
       - name: "Install Salesforce CLI"
         run: npm install @salesforce/cli --global
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
+          echo ${{secrets.SF_AUTH_URL}} 
           echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
 
       - name: "PR Post Processing test"
