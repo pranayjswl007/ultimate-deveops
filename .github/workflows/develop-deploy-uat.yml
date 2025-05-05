@@ -51,9 +51,6 @@ jobs:
         id: pr-post-processing
         run: |
           python3 devops/prDeployPreProcessor.py
-
-      - name: "PR Post Processing Echo Deployment Id"
-        run: |
           echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
           echo "ARTIFACT_URL=${{ steps.pr-post-processing.outputs.ARTIFACT_URL }}" >> $GITHUB_ENV
           echo "ARTIFACT_ID=${{ steps.pr-post-processing.outputs.ARTIFACT_ID }}" >> $GITHUB_ENV
@@ -61,7 +58,7 @@ jobs:
       - name: "Run quick deploy"
 
         run: |
-          sf project deploy quick --job-id $DEPLOYMENT_ID\
+          sf project deploy quick --job-id =${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}\
             --wait 60 \
             --verbose \
             --ignore-warnings \
