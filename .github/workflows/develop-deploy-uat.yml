@@ -6,7 +6,7 @@ on:
       config-path:
         required: true
         type: string
-      environment-name: # <--- define a new input
+      environment-name:
         required: true
         type: string
 
@@ -51,14 +51,16 @@ jobs:
         id: pr-post-processing
         run: |
           python3 devops/prDeployPreProcessor.py
-          echo "DEPLOYMENT_ID=${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}" >> $GITHUB_ENV
-          echo "ARTIFACT_URL=${{ steps.pr-post-processing.outputs.ARTIFACT_URL }}" >> $GITHUB_ENV
-          echo "ARTIFACT_ID=${{ steps.pr-post-processing.outputs.ARTIFACT_ID }}" >> $GITHUB_ENV
+          # Your script is already writing to $GITHUB_ENV correctly
+          # Just echo values to see if they were found
+          echo "Looking for GitHub Actions comments with deployment info..."
 
       - name: "Run quick deploy"
-
         run: |
-          sf project deploy quick --job-id =${{ steps.pr-post-processing.outputs.DEPLOYMENT_ID }}\
+          # Debug - show the value of DEPLOYMENT_ID from environment
+          echo "DEPLOYMENT_ID=${DEPLOYMENT_ID}"
+
+          sf project deploy quick --job-id ${DEPLOYMENT_ID} \
             --wait 60 \
             --verbose \
             --ignore-warnings \
@@ -75,8 +77,8 @@ jobs:
         if: ${{ steps.check-quick-deploy.outputs.QUICK_DEPLOY_STATUS == 'false' }}
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: $ARTIFACT_ID
-          repository: $GITHUB_REPOSITORY
+          artifact-ids: ${ARTIFACT_ID}
+          repository: ${GITHUB_REPOSITORY}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: delta-package.zip
 
