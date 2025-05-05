@@ -60,9 +60,8 @@ summary = f"""
 ### 📌 Deployment Metadata
 - **Deployment ID:** {deployment_id}
 - **Deployment URL:** [View Deployment]({deploy_url})
-- **Artifact URL:** {artifact_url})
-- **Artifact ID:** {artifact_id})
-
+- **Artifact URL:** {artifact_url}
+- **Artifact ID:** {artifact_id}
 """
 
 
