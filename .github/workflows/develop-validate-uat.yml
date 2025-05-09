@@ -56,7 +56,7 @@ jobs:
             --source-dir force-app/
 
       - name: "Scan code"
-        run: sf scanner run --format json --target 'changed-sources' --pmdconfig "devops/masterRuleset.xml" -e pmd --outfile "apexScanResults.json" || exit 1
+        run: sf code-analyzer run --format json --target 'changed-sources' --pmdconfig "devops/masterRuleset.xml" -e pmd --outfile "apexScanResults.json" || exit 1
 
       - name: Set Environment Variables
         run: |
