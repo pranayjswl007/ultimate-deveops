@@ -29,6 +29,7 @@ pmd_violations_file = "apexScanResults.json"
 try:
     with open(pmd_violations_file, "r") as file:
         pmd_violations = json.load(file)
+        print(pmd_violations , indent=4)
         console.print(f"[bold green]✅ Loaded {len(pmd_violations)} file(s) with violations.[/bold green]")
 except FileNotFoundError:
     console.print(f"[bold red on cyan]❌ Error: The file '{pmd_violations_file}' was not found.[/bold red on cyan]")
@@ -66,7 +67,7 @@ console.print(f"[bold green]✅ Deleted {deleted} old PMD comment(s).")
 
 # Step 2: Prepare new comments
 comments = []
-for violation in pmd_violations:
+for violation in pmd_violations.violations:
     try:
         file_path = violation["fileName"].split("changed-sources/")[1]
     except IndexError:
