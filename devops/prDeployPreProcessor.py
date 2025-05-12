@@ -37,7 +37,7 @@ if response.status_code == 200:
 
 
          # Extract Run Id ID using regex
-        run_id_match = re.search(r"\*\*Run ID:\*\*\s([A-Za-z0-9]+)", latest_comment)
+        run_id_match = re.search(r"\*\*Run Id:\*\*\s([A-Za-z0-9]+)", latest_comment)
         if run_id_match:
             run_id = run_id_match.group(1)
             print(f"Run ID: {run_id}")
