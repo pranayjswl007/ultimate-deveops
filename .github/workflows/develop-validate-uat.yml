@@ -100,7 +100,7 @@ jobs:
           git config user.email "github-actions@github.com"
           git add .
           git commit -m "Update code review HTML to site"
-          git push
+          git push https://x-access-token:${TOKEN_GITHUB}@github.com/pranayjswl007/halo-scanner-site.git
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
