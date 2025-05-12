@@ -109,7 +109,7 @@ post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/
 success = 0
 errors = 0
 
-console.printjson(line_comments)
+console.print_json(line_comments)
 with tqdm(total=len(line_comments), desc="Posting Comments", ncols=80) as pbar:
     for c in line_comments:
        
