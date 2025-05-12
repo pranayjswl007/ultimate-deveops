@@ -1,4 +1,7 @@
-name: Nightly Code Scan
+name: Code Scan
+description: Code scan using Salesforce CLI code-analyzer. It uploads the results as a SARIF file.
+# This workflow is called from other workflows to perform code scanning.
+# It uses the Salesforce CLI code-analyzer to scan the code and upload the results as a SARIF file.
 
 on:
   workflow_call:
