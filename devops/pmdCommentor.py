@@ -84,14 +84,26 @@ for v in violations:
     if v.get("resources"):
         body += f"\n\n[More Info]({v['resources'][0]})"
 
+    line = loc.get("startLine", 1)
+    rule = v.get("rule", "")
+    engine = v.get("engine", "")
+    severity = v.get("severity", "")
+    message = v.get("message", "").replace("|", "\\|")  # Escape pipes in message
+    url = v.get("resources", [""])[0]
+
+    markdown_table = (
+        "| Rule | Engine | Severity | Message | More Info |\n"
+        "|------|--------|----------|---------|-----------|\n"
+        f"| {rule} | {engine} | {severity} | {message} | [{url}]({url}) |"
+    )
+
     line_comments.append({
         "path": file_path,
         "line": line,
         "side": "RIGHT",
         "commit_id": commit_id,
-        "body": body
+        "body": f"PMD Violation:\n\n{markdown_table}"
     })
-
 console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} line comment(s)."))
 
 # Step 3: Post line-level comments
