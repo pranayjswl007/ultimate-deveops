@@ -74,6 +74,7 @@ jobs:
           artifact-ids: ${{ env.ARTIFACT_ID }}
           run-id: ${{ env.RUN_ID }}
           repository: ${{ env.GITHUB_REPOSITORY }}
+
           github-token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -83,7 +84,7 @@ jobs:
         run: |
           echo "Unzipping delta package..."
           ls -R
-          unzip -o delta-package.zip
+          unzip -o delta-package/delta-package.zip
           ls -R changed-sources/
           echo "Unzipped delta package contents:"
           ls -R changed-sources/
