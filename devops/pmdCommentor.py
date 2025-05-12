@@ -97,6 +97,10 @@ for v in violations:
         f"| Message | {message} |\n"
         f"| More Info | [link]({url}) |"
     )
+    # check file_path if null continue
+    if not file_path:
+        console.print(f"[red]⚠️ File path is empty for violation: {v}[/red]")
+        continue
 
     line_comments.append({
         "path": file_path,
