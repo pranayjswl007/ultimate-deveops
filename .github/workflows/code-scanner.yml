@@ -9,8 +9,6 @@ on:
 jobs:
   code-scan:
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ inputs.environment-name }}
     steps:
       - uses: actions/setup-node@v3
         with:
