@@ -117,6 +117,6 @@ jobs:
 
             for file in $new_files; do
               echo "🚀 Executing $file"
-              sfdx force:apex:execute -f "$file"
+              sf apex run --file "$file"
             done
           fi
