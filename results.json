@@ -1,0 +1,67 @@
+{
+  "runDir": "/Users/pranay.jaiswal/Documents/GitHub/ultimate-deveops/",
+  "violationCounts": {
+    "total": 2,
+    "sev1": 1,
+    "sev2": 1,
+    "sev3": 0,
+    "sev4": 0,
+    "sev5": 0
+  },
+  "versions": {
+    "code-analyzer": "0.28.0",
+    "pmd": "0.24.0"
+  },
+  "violations": [
+    {
+      "rule": "ApexCSRF",
+      "engine": "pmd",
+      "severity": 1,
+      "tags": [
+        "Recommended",
+        "Security",
+        "Apex",
+        "quickstart"
+      ],
+      "primaryLocationIndex": 0,
+      "locations": [
+        {
+          "file": "force-app/main/default/classes/AccountController.cls",
+          "startLine": 2,
+          "startColumn": 12,
+          "endLine": 4,
+          "endColumn": 6
+        }
+      ],
+      "message": "Avoid making DML operations in Apex class constructor or initializers",
+      "resources": [
+        "https://docs.pmd-code.org/pmd-doc-7.12.0/pmd_rules_apex_errorprone.html#apexcsrf"
+      ]
+    },
+    {
+      "rule": "ApexCRUDViolation",
+      "engine": "pmd",
+      "severity": 2,
+      "tags": [
+        "Recommended",
+        "Security",
+        "Apex",
+        "quickstart"
+      ],
+      "primaryLocationIndex": 0,
+      "locations": [
+        {
+          "file": "force-app/main/default/classes/AccountController.cls",
+          "startLine": 3,
+          "startColumn": 9,
+          "endLine": 3,
+          "endColumn": 51
+        }
+      ],
+      "message": "Validate CRUD permission before SOQL/DML operation",
+      "resources": [
+        "https://docs.pmd-code.org/pmd-doc-7.12.0/pmd_rules_apex_security.html#apexcrudviolation"
+      ]
+    }
+  ]
+}

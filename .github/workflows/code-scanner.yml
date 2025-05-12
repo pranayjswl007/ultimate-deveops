@@ -1,0 +1,52 @@
+name: Nightly Code Scan
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        required: true
+        type: string
+
+jobs:
+  code-scan:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment-name }}
+    steps:
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
+      - name: "Checkout source code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Checkout devops folder from the called repository"
+        run: |
+          git clone --depth 1 --branch main https://github.com/pranayjswl007/ultimate-devops.git
+          cp -r ultimate-devops/devops/ ./devops  # Copy just the devops folder from the called repo
+
+      - name: "Install Salesforce CLI"
+        run: |
+          npm install @salesforce/cli --global
+
+      - name: "Scan code"
+        run: |
+          sf code-analyzer run --target 'force-app' --config-file devops/code-analyzer.yml --rule-selector pmd:quickstart , eslint ,sfge , flow , cpd , regex   --output-file "apexScanResults.sarif" || exit 1
+
+      - name: Set Environment Variables
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
+          echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          # Path to SARIF file relative to the root of the repository
+          sarif_file: apexScanResults.sarif
+          # Optional category for the results
+          # Used to differentiate multiple results for one commit
+          category: Nightly Code Scan
