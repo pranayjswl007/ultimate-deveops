@@ -15,6 +15,7 @@ github_token = os.environ.get('TOKEN_GITHUB')
 commit_id = os.environ.get('COMMIT_ID')
 artifact_url = os.environ.get('ARTIFACT_URL')
 artifact_id = os.environ.get('ARTIFACT_ID')
+run_id = os.environ.get('RUN_ID')
 
 
 print(f"GitHub Repository: {github_repository}")
@@ -22,6 +23,8 @@ print(f"GitHub Token: {github_token}")
 print(f"PR Number: {pr_number}")
 print(f"commit_id: {commit_id}")
 print(f"Artifact URL: {artifact_url}")
+print(f"RUN Id: {run_id}")
+
 
 owner, repo = github_repository.split("/")
 
@@ -62,6 +65,7 @@ summary = f"""
 - **Deployment URL:** [View Deployment]({deploy_url})
 - **Artifact URL:** {artifact_url}
 - **Artifact ID:** {artifact_id}
+- **Run Id:** {run_id}
 """
 
 
