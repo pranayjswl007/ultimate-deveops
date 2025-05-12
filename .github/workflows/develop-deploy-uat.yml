@@ -68,23 +68,36 @@ jobs:
           python3 devops/quickDeploymentResultChecker.py
 
       - name: Download artifact
+        id: download-artifact
         if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
         uses: actions/download-artifact@v4
         with:
           artifact-ids: ${{ env.ARTIFACT_ID }}
           run-id: ${{ env.RUN_ID }}
           repository: ${{ env.GITHUB_REPOSITORY }}
+          path: ./artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: "Unzip delta package"
-        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' && steps.download-artifact.outcome == 'success' }}
         run: |
-          unzip -o delta-package.zip
-          ls -R changed-sources/
-          echo "Unzipped delta package contents:"
-          ls -R changed-sources/
+          if [ ! -f "./artifacts/delta-package.zip" ]; then
+            echo "::error::Delta package not found at expected location"
+            exit 1
+          fi
+
+          echo "Unzipping delta package..."
+          unzip -o ./artifacts/delta-package.zip -d ./changed-sources/
+
+          if [ ! -d "./changed-sources" ]; then
+            echo "::error::Failed to extract changed-sources directory"
+            exit 1
+          fi
+
+          echo "📦 Extracted package contents:"
+          tree ./changed-sources || ls -R ./changed-sources
 
       - name: "Deploy delta package - run all tests"
         if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
