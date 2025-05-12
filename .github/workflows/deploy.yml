@@ -104,22 +104,22 @@ jobs:
             --wait 60 \
             --verbose
 
-            - name: "Execute newly added Apex scripts after merge"
-            run: |
-              BASE=$(git rev-parse HEAD^1)
-              HEAD=$(git rev-parse HEAD)
-              echo "Looking for new Apex scripts between $BASE and $HEAD..."
+      - name: "Execute newly added Apex scripts after merge"
+        run: |
+          BASE=$(git rev-parse HEAD^1)
+          HEAD=$(git rev-parse HEAD)
+          echo "Looking for new Apex scripts between $BASE and $HEAD..."
 
-              new_files=$(git diff --diff-filter=A --name-only $BASE $HEAD | grep '^scripts/apex/' || true)
+          new_files=$(git diff --diff-filter=A --name-only $BASE $HEAD | grep '^scripts/apex/' || true)
 
-              if [[ -z "$new_files" ]]; then
-                echo "✅ No new Apex scripts found in scripts/apex/"
-              else
-                echo "🧾 Found new Apex scripts:"
-                echo "$new_files"
+          if [[ -z "$new_files" ]]; then
+            echo "✅ No new Apex scripts found in scripts/apex/"
+          else
+            echo "🧾 Found new Apex scripts:"
+            echo "$new_files"
 
-                for file in $new_files; do
-                  echo "🚀 Executing $file"
-                  sf apex run --file "$file"
-                done
-              fi
+            for file in $new_files; do
+              echo "🚀 Executing $file"
+              sf apex run --file "$file"
+            done
+          fi
