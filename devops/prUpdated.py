@@ -48,7 +48,7 @@ details = result.get("details", {})
 deployment_id = result.get("id", "N/A")
 deploy_url = result.get("deployUrl", "")
 
-name = result.get("name", "N/A")
+name = deploy_result.get("name", "N/A")
 description = ""
 
 # --- Deployment Summary ---
@@ -130,7 +130,7 @@ response = requests.post(review_url, headers=headers, json=review_payload)
 
 if response.status_code == 200 or response.status_code == 201:
     print(f"{GREEN_TEXT}✅ Review submitted successfully!{RESET}")
-    if(result.get("success")):
+    if(result.get("success") || name=="NothingToDeploy"):
         exit(0)
     else:
         exit(1)
