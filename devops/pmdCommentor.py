@@ -94,7 +94,7 @@ for v in violations:
     markdown_table = (
         "| Rule | Engine | Severity | Message | More Info |\n"
         "|------|--------|----------|---------|-----------|\n"
-        f"| {rule} | {engine} | {severity} | {message} | [{url}]({url}) |"
+        f"| {rule} | {engine} | {severity} | {message} | [link]({url}) |"
     )
 
     line_comments.append({
