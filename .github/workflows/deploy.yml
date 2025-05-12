@@ -66,6 +66,7 @@ jobs:
 
       - name: "Check if quick deploy was successful"
         id: check-quick-deploy
+        if: ${{ env.BYPASS_DEPLOYMENT != 'true' }}
         run: |
           python3 devops/quickDeploymentResultChecker.py
 
