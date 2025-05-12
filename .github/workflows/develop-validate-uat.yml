@@ -57,7 +57,7 @@ jobs:
 
       - name: "Scan code"
         run: |
-          sf code-analyzer run --target 'changed-sources' --config-file devops/code-analyzer.yml --rule-selector pmd:quickstart --output-file "apexScanResults.json" || exit 1
+          sf code-analyzer run --target 'changed-sources' --config-file devops/code-analyzer.yml --rule-selector pmd:quickstart , eslint ,sfge  --output-file "apexScanResults.json" || exit 1
         # run: sf scanner run --format json --target 'changed-sources' --pmdconfig "devops/masterRuleset.xml" -e pmd --outfile "apexScanResults.json" || exit 1
 
       - name: Set Environment Variables

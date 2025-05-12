@@ -80,7 +80,7 @@ for v in violations:
     line = loc.get("startLine", 1)
     message = v.get("message", "")
     rule = v.get("rule", "")
-    body = f"PMD Violation: **{rule}**\n\n{message}"
+    body = f"Violation: **{rule}**\n\n{message}"
     if v.get("resources"):
         body += f"\n\n[More Info]({v['resources'][0]})"
 
@@ -92,7 +92,7 @@ for v in violations:
     url = v.get("resources", [""])[0]
 
     markdown_table = (
-        "| Rule | Engine | Severity | Message | More Info |\n"
+        "| Rule | Engine | Sev | Message | More |\n"
         "|------|--------|----------|---------|-----------|\n"
         f"| {rule} | {engine} | {severity} | {message} | [link]({url}) |"
     )
