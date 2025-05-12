@@ -97,6 +97,7 @@ jobs:
             --test-level RunLocalTests \
             --pre-destructive-changes "changed-sources/destructiveChanges/package.xml" \
             --ignore-warnings \
+            --ignore-conflicts \
             --wait 60 \
             --verbose
 
