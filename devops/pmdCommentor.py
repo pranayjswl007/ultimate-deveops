@@ -67,29 +67,25 @@ line_comments = []
 violations_by_file = defaultdict(list)
 for v in violations:
     primary_index = v.get("primaryLocationIndex", 0)
-    if primary_index >= len(v["locations"]):
+    if not isinstance(primary_index, int) or primary_index >= len(v.get("locations", [])):
         continue
 
-    loc = v["locations"][primary_index]
+    loc = v.get("locations", [{}])[primary_index]
     raw_file = loc.get("file", "")
     try:
         file_path = raw_file.split("changed-sources/")[1]
     except IndexError:
-        file_path = raw_file
+        file_path = raw_file or "unknown_file"
 
     line = loc.get("startLine", 1)
-    message = v.get("message", "")
-    rule = v.get("rule", "")
-    body = f"Violation: **{rule}**\n\n{message}"
-    if v.get("resources"):
-        body += f"\n\n[More Info]({v['resources'][0]})"
+    if not isinstance(line, int) or line < 1:
+        line = 1
 
-    line = loc.get("startLine", 1)
-    rule = v.get("rule", "")
-    engine = v.get("engine", "")
-    severity = v.get("severity", "")
-    message = v.get("message", "").replace("|", "\\|")  # Escape pipes in message
-    url = v.get("resources", [""])[0]
+    message = v.get("message", "No message provided").replace("|", "\\|")  # Escape pipes
+    rule = v.get("rule", "Unknown Rule")
+    engine = v.get("engine", "Unknown Engine")
+    severity = v.get("severity", "Unknown Severity")
+    url = v.get("resources", [""])[0] if v.get("resources") else ""
 
     markdown_table = (
         "| Rule | Engine | Sev | Message | More |\n"
