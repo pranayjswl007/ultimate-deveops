@@ -90,17 +90,17 @@ jobs:
           echo "ARTIFACT_URL=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> $GITHUB_ENV
           echo "ARTIFACT_ID=${{ steps.artifact-upload-step.outputs.artifact-id }}" >> $GITHUB_ENV
 
-      - name: "Update code review HTML to site"
-        run: |
-          git clone --depth 1 --branch main https://github.com/pranayjswl007/halo-scanner-site.git
-          mkdir -p halo-scanner-site/reviews/$PR_NUMBER  # Ensure folder exists
-          cp apexScanResults.html halo-scanner-site/reviews/$PR_NUMBER/
-          cd halo-scanner-site
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add .
-          git commit -m "Update code review HTML to site"
-          git push https://x-access-token:${TOKEN_GITHUB}@github.com/pranayjswl007/halo-scanner-site.git
+      # - name: "Update code review HTML to site"
+      #   run: |
+      #     git clone --depth 1 --branch main https://github.com/pranayjswl007/halo-scanner-site.git
+      #     mkdir -p halo-scanner-site/reviews/$PR_NUMBER  # Ensure folder exists
+      #     cp apexScanResults.html halo-scanner-site/reviews/$PR_NUMBER/
+      #     cd halo-scanner-site
+      #     git config user.name "github-actions"
+      #     git config user.email "github-actions@github.com"
+      #     git add .
+      #     git commit -m "Update code review HTML to site"
+      #     git push https://x-access-token:${TOKEN_GITHUB}@github.com/pranayjswl007/halo-scanner-site.git
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
