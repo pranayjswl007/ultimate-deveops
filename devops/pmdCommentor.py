@@ -89,9 +89,13 @@ for v in violations:
     url = v.get("resources", [""])[0] if v.get("resources") else ""
 
     markdown_table = (
-        "| Rule | Engine | Sev | Message | More |\n"
-        "|------|--------|----------|---------|-----------|\n"
-        f"| {rule} | {engine} | {severity} | {message} | [link]({url}) |"
+        "| Detail | Value |\n"
+        "|--------|-------|\n"
+        f"| Rule | {rule} |\n"
+        f"| Engine | {engine} |\n"
+        f"| Severity | {severity} |\n"
+        f"| Message | {message} |\n"
+        f"| More Info | [link]({url}) |"
     )
 
     line_comments.append({
@@ -99,7 +103,7 @@ for v in violations:
         "line": line,
         "side": "RIGHT",
         "commit_id": commit_id,
-        "body": f"PMD Violation:\n\n{markdown_table}"
+        "body": f"\n\n{markdown_table}"
     })
 console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} line comment(s)."))
 
