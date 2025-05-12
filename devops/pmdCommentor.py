@@ -76,7 +76,7 @@ for v in violations:
     try:
         file_path = raw_file.split("changed-sources/")[1]
     except IndexError:
-        file_path = raw_file or "unknown_file"
+        file_path = raw_file 
 
     line = loc.get("startLine", 1)
     if not isinstance(line, int) or line < 1:
