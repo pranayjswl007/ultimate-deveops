@@ -1,0 +1,120 @@
+name: PR Validation
+on:
+  workflow_call:
+    inputs:
+      environment-name: # <--- define a new input
+        required: true
+        type: string
+      runQualityCheck:
+        required: false
+        type: boolean
+        default: true
+      runJestTests:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment-name }}
+    steps:
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
+      - name: "Checkout source code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Checkout devops folder from the called repository"
+        run: |
+          git clone --depth 1 --branch main https://github.com/pranayjswl007/ultimate-devops.git
+          cp -r ultimate-devops/devops/ ./devops  # Copy just the devops folder from the called repo
+
+      - name: "Install Salesforce CLI"
+        run: |
+          npm install @salesforce/cli --global
+
+      - name: "Installing sfdx git delta"
+        run: |
+          echo y | sf plugins install sfdx-git-delta
+
+      - name: Set Environment Variables
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
+          echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
+          echo "RUN_ID=${{ github.run_id }}" >> $GITHUB_ENV
+
+      - name: "Run Jest tests"
+        if: ${{ inputs.runJestTests }}
+        run: |
+          npm install --omit=optional
+          npm install @salesforce/sfdx-lwc-jest --save-dev
+          npm run test:unit
+
+        # Scan code
+
+      - name: "Create delta packages for new, modified or deleted metadata"
+        run: |
+          mkdir changed-sources
+          sf sgd source delta \
+            --to "HEAD" \
+            --from "origin/${{ github.event.inputs.deployFromBranch || 'develop' }}" \
+            --output-dir changed-sources/ \
+            --generate-delta \
+            --source-dir force-app/
+
+      - name: "Scan code"
+        if: ${{ inputs.runQualityCheck }}
+        run: |
+          sf code-analyzer run --target 'changed-sources' --config-file devops/code-analyzer.yml --rule-selector pmd:quickstart , eslint  , flow  , regex   --output-file "apexScanResults.json" --output-file "apexScanResults.html" || exit 1
+        # run: sf scanner run --format json --target 'changed-sources' --pmdconfig "devops/masterRuleset.xml" -e pmd --outfile "apexScanResults.json" || exit 1
+
+      - name: Install Python dependencies
+        if: ${{ inputs.runQualityCheck }}
+        run: pip install -r ./devops/requirements.txt
+
+      - name: "post comment to github"
+        if: ${{ inputs.runQualityCheck }}
+        run: |
+          python3 devops/pmdCommentor.py
+
+      - name: "Zip delta package"
+        run: |
+          zip -r delta-package.zip changed-sources
+
+      - name: "Upload delta package as artifact"
+        id: artifact-upload-step
+        uses: actions/upload-artifact@v4
+        with:
+          name: delta-package
+          path: delta-package.zip
+
+      - name: Set environment variable
+        run: |
+          echo "ARTIFACT_URL=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> $GITHUB_ENV
+          echo "ARTIFACT_ID=${{ steps.artifact-upload-step.outputs.artifact-id }}" >> $GITHUB_ENV
+
+      - name: "Authenticate using SFDX_AUTH_URL"
+        run: |
+          echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
+
+      - name: "Validate only deployment - run all tests"
+        run: |
+          sf project deploy start \
+           --manifest "changed-sources/package/package.xml" \
+           --test-level RunLocalTests \
+           --dry-run \
+           --pre-destructive-changes "changed-sources/destructiveChanges/package.xml" \
+           --ignore-warnings \
+           --ignore-conflicts \
+           --json > deploymentResult.json || true
+
+      - name: "Update the PR body with the latest content to allow quick validation and summary"
+        run: |
+          python3 devops/prUpdated.py

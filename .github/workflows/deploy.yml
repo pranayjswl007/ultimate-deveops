@@ -1,0 +1,122 @@
+name: Deploy to environment
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        required: true
+        type: string
+
+jobs:
+  deploy-to-uat:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment-name }}
+
+    steps:
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
+      - name: "Checkout source code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set Environment Variables
+        run: |
+          echo "environment-name=${{ inputs.environment-name }}" 
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
+          echo "TOKEN_GITHUB=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "COMMIT_ID=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
+
+      - name: "Checkout devops folder from the called repository"
+        run: |
+          git clone --depth 1 --branch main https://github.com/pranayjswl007/ultimate-devops.git
+          cp -r ultimate-devops/devops/ ./devops  # Copy just the devops folder from the called repo
+
+      - name: "Install Salesforce CLI"
+        run: npm install @salesforce/cli --global
+
+      - name: "Authenticate using SFDX_AUTH_URL"
+        run: |
+          echo ${{secrets.SF_AUTH_URL}} 
+          echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
+
+      - name: "PR Post Processing test"
+        id: pr-post-processing
+        run: |
+          python3 devops/prDeployPreProcessor.py
+          # Your script is already writing to $GITHUB_ENV correctly
+          # Just echo values to see if they were found
+          echo "Looking for GitHub Actions comments with deployment info..."
+
+      - name: "Run quick deploy"
+        run: |
+          # Debug - show the value of DEPLOYMENT_ID from environment
+          echo "DEPLOYMENT_ID=${DEPLOYMENT_ID}"
+
+          sf project deploy quick --job-id ${DEPLOYMENT_ID} \
+            --wait 60 \
+            --verbose \
+            --json > deploymentResult.json || true
+
+      - name: "Check if quick deploy was successful"
+        id: check-quick-deploy
+        run: |
+          python3 devops/quickDeploymentResultChecker.py
+
+      - name: Download artifact
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.ARTIFACT_ID }}
+          run-id: ${{ env.RUN_ID }}
+          repository: ${{ env.GITHUB_REPOSITORY }}
+
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Unzip delta package"
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
+        run: |
+          echo "Unzipping delta package..."
+          ls -R
+          unzip -o delta-package/delta-package.zip
+          ls -R changed-sources/
+          echo "Unzipped delta package contents:"
+          ls -R changed-sources/
+
+      - name: "Deploy delta package - run all tests"
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
+        run: |
+          sf project deploy start \
+            --manifest "changed-sources/package/package.xml" \
+            --test-level RunLocalTests \
+            --pre-destructive-changes "changed-sources/destructiveChanges/package.xml" \
+            --ignore-warnings \
+            --ignore-conflicts \
+            --wait 60 \
+            --verbose
+
+      - name: "Execute newly added Apex scripts"
+        run: |
+          BASE=$(git merge-base origin/main HEAD)
+          HEAD=$(git rev-parse HEAD)
+          echo "Looking for new Apex scripts between $BASE and $HEAD..."
+
+          new_files=$(git diff --diff-filter=A --name-only $BASE $HEAD | grep '^scripts/apex/' || true)
+
+          if [[ -z "$new_files" ]]; then
+            echo "✅ No new Apex scripts found in scripts/apex/"
+          else
+            echo "🧾 Found new Apex scripts:"
+            echo "$new_files"
+
+            for file in $new_files; do
+              echo "🚀 Executing $file"
+              sf apex run --file "$file"
+            done
+          fi
