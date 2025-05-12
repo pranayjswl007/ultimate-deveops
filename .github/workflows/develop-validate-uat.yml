@@ -57,7 +57,7 @@ jobs:
 
       - name: "Scan code"
         run: |
-          sf code-analyzer run --target 'changed-sources' --config-file devops/code-analyzer.yml --rule-selector pmd:quickstart , eslint ,sfge , flow , cpd , regex   --output-file "apexScanResults.json" || exit 1
+          sf code-analyzer run --target 'changed-sources' --config-file devops/code-analyzer.yml --rule-selector pmd:quickstart , eslint ,sfge , flow , cpd , regex   --output-file "apexScanResults.json" --output-file "apexScanResults.html" || exit 1
         # run: sf scanner run --format json --target 'changed-sources' --pmdconfig "devops/masterRuleset.xml" -e pmd --outfile "apexScanResults.json" || exit 1
 
       - name: Set Environment Variables
@@ -89,6 +89,13 @@ jobs:
         run: |
           echo "ARTIFACT_URL=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> $GITHUB_ENV
           echo "ARTIFACT_ID=${{ steps.artifact-upload-step.outputs.artifact-id }}" >> $GITHUB_ENV
+
+      - name: "Upload Code scanner report package as artifact"
+        id: scanner-report-upload-step
+        uses: actions/upload-artifact@v4
+        with:
+          name: report.html
+          path: apexScanResults.html
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
