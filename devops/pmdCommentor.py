@@ -4,7 +4,6 @@ import requests
 import time
 from tqdm import tqdm
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 
 # Rich console
@@ -25,12 +24,12 @@ console.print(f"[bold green]Commit ID:[/bold green] {commit_id}")
 # PMD results file
 pmd_violations_file = "apexScanResults.json"
 
-# Load PMD results
+# Load scan results
 try:
     with open(pmd_violations_file, "r") as file:
-        pmd_violations = json.load(file)
-       
-        console.print(f"[bold green]✅ Loaded {len(pmd_violations)} file(s) with violations.[/bold green]")
+        scan_results = json.load(file)
+        violations = scan_results.get("violations", [])
+        console.print(f"[bold green]✅ Loaded {len(violations)} violation(s).[/bold green]")
 except FileNotFoundError:
     console.print(f"[bold red on cyan]❌ Error: The file '{pmd_violations_file}' was not found.[/bold red on cyan]")
     exit(1)
@@ -38,7 +37,7 @@ except json.JSONDecodeError:
     console.print(f"[bold red on cyan]❌ Error: Invalid JSON in '{pmd_violations_file}'.[/bold red on cyan]")
     exit(1)
 
-# Step 1: Fetch and remove old PMD-related comments
+# Step 1: Remove old PMD-related comments
 console.rule("[bold yellow]🧹 Cleaning up old PMD comments")
 list_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
 headers = {
@@ -67,26 +66,31 @@ console.print(f"[bold green]✅ Deleted {deleted} old PMD comment(s).")
 
 # Step 2: Prepare new comments
 comments = []
-for violation in pmd_violations:
-    try:
-        file_path = violation["fileName"].split("changed-sources/")[1]
-    except IndexError:
-        file_path = violation["fileName"]
+for v in violations:
+    primary_index = v.get("primaryLocationIndex", 0)
+    if primary_index >= len(v["locations"]):
+        console.print(f"[yellow]⚠️ Skipping violation due to invalid primaryLocationIndex: {primary_index}[/yellow]")
+        continue
 
-    for vo in violation["violations"]:
-        line_number = vo["line"]
-        end_line = vo.get("endLine", line_number)
-        if end_line == line_number:
-            end_line = line_number + 1
+    location = v["locations"][primary_index]
+    file_path = location["file"]
+    line_number = location["startLine"]
+    end_line = location.get("endLine", line_number)
+    if end_line == line_number:
+        end_line = line_number + 1
 
-        comment = {
-            "path": file_path,
-            "line": line_number,
-            "side": "RIGHT",
-            "commit_id": commit_id,
-            "body": f"PMD Violation: {vo['message']}"
-        }
-        comments.append(comment)
+    message = f"PMD Violation: {v['message']}"
+    if v.get("resources"):
+        message += "\n\nReferences:\n" + "\n".join(v["resources"])
+
+    comment = {
+        "path": file_path,
+        "line": line_number,
+        "side": "RIGHT",
+        "commit_id": commit_id,
+        "body": message
+    }
+    comments.append(comment)
 
 console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(comments)} new comment(s)."))
 
