@@ -48,11 +48,14 @@ details = result.get("details", {})
 deployment_id = result.get("id", "N/A")
 deploy_url = result.get("deployUrl", "")
 
+name = result.get("name", "N/A")
+description = ""
 
 # --- Deployment Summary ---
 summary = f"""
-### 🚀 Deployment Summary
-- **Status:** {"✅ Success" if result.get("success") else "❌ Failed"}
+### 🚀 Deployment/Validation Summary
+- **Status:** {"✅ Success" if result.get("success") or name=="NothingToDeploy" else "❌ Failed"}
+- **Name:** {name}
 - **Start Time:** {result.get("startDate", "N/A")}
 - **End Time:** {result.get("completedDate", "N/A")}
 - **Components Deployed:** {result.get("numberComponentsDeployed", 0)} / {result.get("numberComponentsTotal", 0)}

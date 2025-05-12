@@ -53,6 +53,8 @@ jobs:
           echo "Looking for GitHub Actions comments with deployment info..."
 
       - name: "Run quick deploy"
+        id: quick-deploy
+        if: ${{ env.BYPASS_DEPLOYMENT != 'true' }}
         run: |
           # Debug - show the value of DEPLOYMENT_ID from environment
           echo "DEPLOYMENT_ID=${DEPLOYMENT_ID}"
@@ -68,7 +70,7 @@ jobs:
           python3 devops/quickDeploymentResultChecker.py
 
       - name: Download artifact
-        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' && env.BYPASS_DEPLOYMENT != 'true' }}
         uses: actions/download-artifact@v4
         with:
           artifact-ids: ${{ env.ARTIFACT_ID }}
@@ -80,7 +82,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: "Unzip delta package"
-        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' && env.BYPASS_DEPLOYMENT != 'true' }}
         run: |
           echo "Unzipping delta package..."
           ls -R
@@ -90,7 +92,7 @@ jobs:
           ls -R changed-sources/
 
       - name: "Deploy delta package - run all tests"
-        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' }}
+        if: ${{ env.QUICK_DEPLOY_STATUS == 'false' && env.BYPASS_DEPLOYMENT != 'true' }}
         run: |
           sf project deploy start \
             --manifest "changed-sources/package/package.xml" \

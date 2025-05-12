@@ -36,6 +36,17 @@ if response.status_code == 200:
         print(latest_comment)
 
 
+        # Regex pattern to  No code deployment
+        name_match = re.search(r"\*\*Name:\*\*\s([A-Za-z0-9]+)", latest_comment or "")
+        if name_match:
+            name = name_match.group(1)
+            print(f"Name: {name}")
+            # Set BYPASS_DEPLOYMENT environment variable
+            with open(env_file, "a") as f:
+                bypass_value = str(name == "NothingToDeploy").lower()  # Convert to lowercase string
+                f.write(f"BYPASS_DEPLOYMENT={bypass_value}\n")
+        else:
+            print("Name not found in comment") 
          # Extract Run Id ID using regex
         run_id_match = re.search(r"\*\*Run Id:\*\*\s([A-Za-z0-9]+)", latest_comment)
         if run_id_match:
