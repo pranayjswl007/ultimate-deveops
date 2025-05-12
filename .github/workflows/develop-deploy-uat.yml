@@ -99,3 +99,23 @@ jobs:
             --ignore-warnings \
             --wait 60 \
             --verbose
+
+      - name: "Execute newly added Apex scripts"
+        run: |
+          BASE=$(git merge-base origin/main HEAD)
+          HEAD=$(git rev-parse HEAD)
+          echo "Looking for new Apex scripts between $BASE and $HEAD..."
+
+          new_files=$(git diff --diff-filter=A --name-only $BASE $HEAD | grep '^scripts/apex/' || true)
+
+          if [[ -z "$new_files" ]]; then
+            echo "✅ No new Apex scripts found in scripts/apex/"
+          else
+            echo "🧾 Found new Apex scripts:"
+            echo "$new_files"
+
+            for file in $new_files; do
+              echo "🚀 Executing $file"
+              sfdx force:apex:execute -f "$file"
+            done
+          fi
