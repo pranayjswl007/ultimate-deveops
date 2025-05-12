@@ -5,10 +5,6 @@ description: Code scan using Salesforce CLI code-analyzer. It uploads the result
 
 on:
   workflow_call:
-    inputs:
-      environment-name:
-        required: true
-        type: string
 
 jobs:
   code-scan:
