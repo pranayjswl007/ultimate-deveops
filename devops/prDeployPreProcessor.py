@@ -40,7 +40,7 @@ if response.status_code == 200:
         run_id_match = re.search(r"\*\*Run ID:\*\*\s([A-Za-z0-9]+)", latest_comment)
         if run_id_match:
             run_id = run_id_match.group(1)
-            print(f"Run ID: {deployment_id}")
+            print(f"Run ID: {run_id}")
             # Set Deployment ID as an environment variable
             with open(env_file, "a") as f:
                 f.write(f"RUN_ID={run_id}\n")
