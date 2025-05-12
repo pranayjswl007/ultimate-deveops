@@ -27,7 +27,7 @@ pmd_violations_file = "apexScanResults.json"
 try:
     with open(pmd_violations_file, "r") as file:
         scan_results = json.load(file)
-        console.printjson(data=scan_results)    
+        console.print_json(data=scan_results)    
         violations = scan_results.get("violations", [])
         console.print(f"[bold green]✅ Loaded {len(violations)} violation(s).[/bold green]")
 except (FileNotFoundError, json.JSONDecodeError) as e:
