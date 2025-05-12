@@ -106,6 +106,9 @@ jobs:
 
       - name: "Execute newly added Apex scripts"
         run: |
+          echo "Checking for new Apex scripts in scripts/apex/..."
+          git diff --diff-filter=A --name-only $BASE $HEAD
+
           BASE=$(git merge-base origin/main HEAD)
           HEAD=$(git rev-parse HEAD)
           echo "Looking for new Apex scripts between $BASE and $HEAD..."
