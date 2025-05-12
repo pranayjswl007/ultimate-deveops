@@ -2,9 +2,6 @@ name: PR Validation in uat
 on:
   workflow_call:
     inputs:
-      config-path:
-        required: true
-        type: string
       environment-name: # <--- define a new input
         required: true
         type: string
