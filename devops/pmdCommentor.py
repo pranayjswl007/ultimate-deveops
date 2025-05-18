@@ -51,7 +51,7 @@ if response.status_code != 200:
 comments_data = response.json()
 deleted = 0
 for comment in comments_data:
-    if "PMD Violation:" in comment.get("body", ""):
+    if "| Detail | Value |" in comment.get("body", ""):
         delete_url = comment["url"]
         del_response = requests.delete(delete_url, headers=headers)
         if del_response.status_code == 204:
