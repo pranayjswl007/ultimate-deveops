@@ -18,6 +18,37 @@ jobs:
         with:
           node-version: "22"
 
+      # Set custom prefix to cache global npm packages like Salesforce CLI
+      - name: Set custom npm prefix
+        run: npm config set prefix ~/.npm-global
+
+      - name: Cache Global npm packages (Salesforce CLI etc.)
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm-global
+          key: ${{ runner.os }}-npm-global-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-global-
+
+      - name: Add custom prefix to PATH
+        run: echo "$HOME/.npm-global/bin" >> $GITHUB_PATH
+
+      - name: Cache Node.js modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Cache Python packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('devops/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: "Checkout source code"
         uses: actions/checkout@v4
         with:
@@ -34,29 +65,25 @@ jobs:
       - name: "Checkout devops folder from the called repository"
         run: |
           git clone --depth 1 --branch main https://github.com/pranayjswl007/ultimate-devops.git
-          cp -r ultimate-devops/devops/ ./devops  # Copy just the devops folder from the called repo
+          cp -r ultimate-devops/devops/ ./devops
 
       - name: "Install Salesforce CLI"
         run: npm install @salesforce/cli --global
 
       - name: "Authenticate using SFDX_AUTH_URL"
         run: |
-          echo ${{secrets.SF_AUTH_URL}} 
           echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
 
       - name: "PR Post Processing test"
         id: pr-post-processing
         run: |
           python3 devops/prDeployPreProcessor.py
-          # Your script is already writing to $GITHUB_ENV correctly
-          # Just echo values to see if they were found
           echo "Looking for GitHub Actions comments with deployment info..."
 
       - name: "Run quick deploy"
         id: quick-deploy
         if: ${{ env.BYPASS_DEPLOYMENT != 'true' }}
         run: |
-          # Debug - show the value of DEPLOYMENT_ID from environment
           echo "DEPLOYMENT_ID=${DEPLOYMENT_ID}"
 
           sf project deploy quick --job-id ${DEPLOYMENT_ID} \
@@ -77,7 +104,6 @@ jobs:
           artifact-ids: ${{ env.ARTIFACT_ID }}
           run-id: ${{ env.RUN_ID }}
           repository: ${{ env.GITHUB_REPOSITORY }}
-
           github-token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -85,11 +111,7 @@ jobs:
       - name: "Unzip delta package"
         if: ${{ env.QUICK_DEPLOY_STATUS == 'false' && env.BYPASS_DEPLOYMENT != 'true' }}
         run: |
-          echo "Unzipping delta package..."
-          ls -R
           unzip -o delta-package/delta-package.zip
-          ls -R changed-sources/
-          echo "Unzipped delta package contents:"
           ls -R changed-sources/
 
       - name: "Deploy delta package - run all tests"
@@ -108,18 +130,39 @@ jobs:
         run: |
           BASE=$(git rev-parse HEAD^1)
           HEAD=$(git rev-parse HEAD)
-          echo "Looking for new Apex scripts between $BASE and $HEAD..."
 
-          new_files=$(git diff --diff-filter=A --name-only $BASE $HEAD | grep '^scripts/apex/' || true)
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            folder="scripts/apex/production"
+          else
+            folder="scripts/apex/sandbox"
+          fi
+
+          new_files=$(git diff --diff-filter=A --name-only "$BASE" "$HEAD" | grep "^$folder" || true)
 
           if [[ -z "$new_files" ]]; then
-            echo "✅ No new Apex scripts found in scripts/apex/"
+            echo "✅ No new Apex scripts found in $folder"
           else
-            echo "🧾 Found new Apex scripts:"
-            echo "$new_files"
-
             for file in $new_files; do
               echo "🚀 Executing $file"
               sf apex run --file "$file"
             done
           fi
+
+      - name: Get formatted date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: "Create GitHub Release"
+        if: github.ref == 'refs/heads/main'
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: release-${{ steps.date.outputs.date }}-${{ github.run_number }}
+          release_name: Release on ${{ steps.date.outputs.date }} (#${{ github.run_number }})
+          body: |
+            🚀 Deployment to `main` completed successfully.
+            Includes changes from commit ${{ github.sha }}.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
