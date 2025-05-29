@@ -75,6 +75,7 @@ summary = f"""
 # --- Failures for Review Body ---
 failures = details.get("runTestResult", {}).get("failures", [])
 coverage_warnings = details.get("runTestResult", {}).get("codeCoverageWarnings", [])
+flow_coverage_warnings = details.get("runTestResult", {}).get("flowCoverageWarnings", [])
 component_failures = details.get("componentFailures", [])
 
 if component_failures:
@@ -91,6 +92,62 @@ if coverage_warnings:
     summary += "\n\n### ⚠️ Code Coverage Warnings\n| Name | Message |\n|------|---------|\n"
     for warning in coverage_warnings:
         summary += f"| `{warning['name']}` | {warning['message']} |\n"
+
+if flow_coverage_warnings:
+    summary += "\n\n### ⚠️ Flow Coverage Warnings\n| Flow Name | Message |\n|-----------|---------|\n"
+    for warning in flow_coverage_warnings:
+        summary += f"| `{warning.get('name')}` | {warning.get('message')} |\n"
+
+# --- Top 10 Apex Classes with <90% Coverage ---
+coverage_info = details.get("runTestResult", {}).get("codeCoverage", [])
+coverage_data = []
+
+for item in coverage_info:
+    total = item.get("numLocations", 0)
+    uncovered = item.get("numLocationsNotCovered", 0)
+    if total == 0:
+        continue
+    coverage_pct = round((total - uncovered) * 100 / total, 2)
+    if coverage_pct < 90:
+        coverage_data.append({
+            "name": item.get("name"),
+            "coverage": coverage_pct,
+            "uncovered": uncovered
+        })
+
+coverage_data.sort(key=lambda x: x["coverage"])
+
+if coverage_data:
+    summary += "\n\n### 🧪 Top 10 Apex Classes with <90% Code Coverage\n| Class | Coverage % | Uncovered Lines |\n|-------|-------------|------------------|\n"
+    for item in coverage_data[:10]:
+        summary += f"| `{item['name']}` | {item['coverage']}% | {item['uncovered']} |\n"
+
+
+# --- Top 10 Flows with <90% Coverage ---
+flow_coverage = details.get("runTestResult", {}).get("flowCoverage", [])
+flow_coverage_data = []
+
+for flow in flow_coverage:
+    total = flow.get("numElements", 0)
+    uncovered = flow.get("numElementsNotCovered", 0)
+    if total == 0:
+        continue
+    coverage_pct = round((total - uncovered) * 100 / total, 2)
+    if coverage_pct < 90:
+        flow_coverage_data.append({
+            "flowName": flow.get("flowName"),
+            "coverage": coverage_pct,
+            "uncovered": uncovered,
+            "processType": flow.get("processType")
+        })
+
+flow_coverage_data.sort(key=lambda x: x["coverage"])
+
+if flow_coverage_data:
+    summary += "\n\n### 🔁 Top 10 Flows with <90% Coverage\n| Flow Name | Type | Coverage % | Uncovered Elements |\n|-----------|------|-------------|---------------------|\n"
+    for flow in flow_coverage_data[:10]:
+        summary += f"| `{flow['flowName']}` | {flow['processType']} | {flow['coverage']}% | {flow['uncovered']} |\n"
+
 
 # --- Inline Review Comments ---
 comments = []
