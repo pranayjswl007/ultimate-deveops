@@ -1,60 +1,48 @@
 import os
 import json
 import requests
-import datetime
+import logging
+from typing import List, Dict
 
+# --- Logging Setup ---
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
+# --- ANSI Colors ---
 GREEN_TEXT = '\033[32m'
 YELLOW_TEXT = '\033[33m'
 RED_TEXT = '\033[31m'
 RESET = '\033[0m'
-CYAN_BG = '\033[46m'
 
-pr_number = os.environ.get('PR_NUMBER')
-github_repository = os.environ.get('GITHUB_REPOSITORY')
-github_token = os.environ.get('TOKEN_GITHUB')
-commit_id = os.environ.get('COMMIT_ID')
-artifact_url = os.environ.get('ARTIFACT_URL')
-artifact_id = os.environ.get('ARTIFACT_ID')
-run_id = os.environ.get('RUN_ID')
+# --- Utility Functions ---
+def get_env_vars() -> Dict[str, str]:
+    keys = [
+        'PR_NUMBER', 'GITHUB_REPOSITORY', 'TOKEN_GITHUB',
+        'COMMIT_ID', 'ARTIFACT_URL', 'ARTIFACT_ID', 'RUN_ID'
+    ]
+    return {key: os.environ.get(key) for key in keys}
 
+def load_json_file(filename: str) -> dict:
+    try:
+        with open(filename, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logging.error(f"File not found: {filename}")
+        exit(1)
+    except json.JSONDecodeError:
+        logging.error(f"Invalid JSON in {filename}")
+        exit(1)
 
-print(f"GitHub Repository: {github_repository}")
-print(f"GitHub Token: {github_token}")
-print(f"PR Number: {pr_number}")
-print(f"commit_id: {commit_id}")
-print(f"Artifact URL: {artifact_url}")
-print(f"RUN Id: {run_id}")
+def build_summary(deploy_result: dict, env: dict) -> str:
+    result = deploy_result.get("result", {})
+    details = result.get("details", {})
 
+    name = deploy_result.get("name", "N/A")
+    deployment_id = result.get("id", "N/A")
+    deploy_url = result.get("deployUrl", "")
 
-owner, repo = github_repository.split("/")
-
-deployment_result_file = "deploymentResult.json"
-
-try:
-    with open(deployment_result_file, "r") as file:
-        deploy_result = json.load(file)
-        print("✅ Deployment result loaded.")
-        print(json.dumps(deploy_result, indent=2))
-except FileNotFoundError:
-    print(f"{CYAN_BG}{RED_TEXT}Error: File {deployment_result_file} not found.{RESET}")
-    exit(1)
-except json.JSONDecodeError:
-    print(f"{CYAN_BG}{RED_TEXT}Error: Invalid JSON in {deployment_result_file}.{RESET}")
-    exit(1)
-
-result = deploy_result.get("result", {})
-details = result.get("details", {})
-
-deployment_id = result.get("id", "N/A")
-deploy_url = result.get("deployUrl", "")
-
-name = deploy_result.get("name", "N/A")
-description = ""
-
-# --- Deployment Summary ---
-summary = f"""
-### 🚀 Deployment/Validation Summary
-- **Status:** {"✅ Success" if result.get("success") or name=="NothingToDeploy" else "❌ Failed"}
+    summary = f"""
+### \U0001F680 Deployment/Validation Summary
+- **Status:** {"\u2705 Success" if result.get("success") or name=="NothingToDeploy" else "\u274C Failed"}
 - **Name:** {name}
 - **Start Time:** {result.get("startDate", "N/A")}
 - **End Time:** {result.get("completedDate", "N/A")}
@@ -62,159 +50,159 @@ summary = f"""
 - **Component Errors:** {result.get("numberComponentErrors", 0)}
 - **Tests Run:** {result.get("numberTestsCompleted", 0)} / {result.get("numberTestsTotal", 0)}
 
-
-### 📌 Deployment Metadata
+### \ud83d\udccc Deployment Metadata
 - **Deployment ID:** {deployment_id}
 - **Deployment URL:** [View Deployment]({deploy_url})
-- **Artifact URL:** {artifact_url}
-- **Artifact ID:** {artifact_id}
-- **Run Id:** {run_id}
+- **Artifact URL:** {env['ARTIFACT_URL']}
+- **Artifact ID:** {env['ARTIFACT_ID']}
+- **Run Id:** {env['RUN_ID']}
 """
 
+    # Add details
+    summary += format_failures(details)
+    summary += format_coverage(details)
+    return summary
 
-# --- Failures for Review Body ---
-failures = details.get("runTestResult", {}).get("failures", [])
-coverage_warnings = details.get("runTestResult", {}).get("codeCoverageWarnings", [])
-flow_coverage_warnings = details.get("runTestResult", {}).get("flowCoverageWarnings", [])
-component_failures = details.get("componentFailures", [])
+def format_failures(details: dict) -> str:
+    section = ""
+    failures = details.get("runTestResult", {}).get("failures", [])
+    coverage_warnings = details.get("runTestResult", {}).get("codeCoverageWarnings", [])
+    flow_warnings = details.get("runTestResult", {}).get("flowCoverageWarnings", [])
+    component_failures = details.get("componentFailures", [])
 
-if component_failures:
-    summary += "\n\n### ❌ Component Failures\n| Type | File | Problem |\n|------|------|---------|\n"
-    for cf in component_failures:
-        summary += f"| {cf.get('componentType')} | `{cf.get('fileName')}` | {cf.get('problem')} |\n"
+    if component_failures:
+        section += "\n\n### \u274C Component Failures\n| Type | File | Problem |\n|------|------|---------|\n"
+        for cf in component_failures:
+            section += f"| {cf.get('componentType')} | `{cf.get('fileName')}` | {cf.get('problem')} |\n"
 
-if failures:
-    summary += "\n\n### ❌ Test Failures\n| Name | Method | Message |\n|------|--------|---------|\n"
-    for failure in failures:
-        summary += f"| `{failure['name']}` | `{failure['methodName']}` | {failure['message']} |\n"
+    if failures:
+        section += "\n\n### \u274C Test Failures\n| Name | Method | Message |\n|------|--------|---------|\n"
+        for failure in failures:
+            section += f"| `{failure['name']}` | `{failure['methodName']}` | {failure['message']} |\n"
 
-if coverage_warnings:
-    summary += "\n\n### ⚠️ Code Coverage Warnings\n| Name | Message |\n|------|---------|\n"
-    for warning in coverage_warnings:
-        summary += f"| `{warning['name']}` | {warning['message']} |\n"
+    if coverage_warnings:
+        section += "\n\n### \u26A0\uFE0F Code Coverage Warnings\n| Name | Message |\n|------|---------|\n"
+        for warning in coverage_warnings:
+            section += f"| `{warning['name']}` | {warning['message']} |\n"
 
-if flow_coverage_warnings:
-    summary += "\n\n### ⚠️ Flow Coverage Warnings\n| Flow Name | Message |\n|-----------|---------|\n"
-    for warning in flow_coverage_warnings:
-        summary += f"| `{warning.get('name')}` | {warning.get('message')} |\n"
+    if flow_warnings:
+        section += "\n\n### \u26A0\uFE0F Flow Coverage Warnings\n| Flow Name | Message |\n|-----------|---------|\n"
+        for warning in flow_warnings:
+            section += f"| `{warning.get('name')}` | {warning.get('message')} |\n"
 
-# --- Top 10 Apex Classes with <90% Coverage ---
-coverage_info = details.get("runTestResult", {}).get("codeCoverage", [])
-coverage_data = []
+    return section
 
-for item in coverage_info:
-    total = item.get("numLocations", 0)
-    uncovered = item.get("numLocationsNotCovered", 0)
-    if total == 0:
-        continue
-    coverage_pct = round((total - uncovered) * 100 / total, 2)
-    if coverage_pct < 90:
-        coverage_data.append({
-            "name": item.get("name"),
-            "coverage": coverage_pct,
-            "uncovered": uncovered
+def format_coverage(details: dict) -> str:
+    section = ""
+    code_coverage = details.get("runTestResult", {}).get("codeCoverage", [])
+    flows = details.get("runTestResult", {}).get("flowCoverage", [])
+
+    under_covered = [
+        {
+            "name": c.get("name"),
+            "coverage": round((c.get("numLocations", 0) - c.get("numLocationsNotCovered", 0)) * 100 / c.get("numLocations", 1), 2),
+            "uncovered": c.get("numLocationsNotCovered")
+        } for c in code_coverage if c.get("numLocations", 0) and round((c.get("numLocations", 0) - c.get("numLocationsNotCovered", 0)) * 100 / c.get("numLocations", 1), 2) < 90
+    ]
+    under_covered.sort(key=lambda x: x['coverage'])
+
+    if under_covered:
+        section += "\n\n### \U0001F9EA Top 10 Apex Classes with <90% Code Coverage\n| Class | Coverage % | Uncovered Lines |\n|-------|-------------|------------------|\n"
+        for item in under_covered[:10]:
+            section += f"| `{item['name']}` | {item['coverage']}% | {item['uncovered']} |\n"
+
+    flow_coverage = [
+        {
+            "flowName": f.get("flowName"),
+            "coverage": round((f.get("numElements", 0) - f.get("numElementsNotCovered", 0)) * 100 / f.get("numElements", 1), 2),
+            "uncovered": f.get("numElementsNotCovered"),
+            "processType": f.get("processType")
+        } for f in flows if f.get("numElements", 0) and round((f.get("numElements", 0) - f.get("numElementsNotCovered", 0)) * 100 / f.get("numElements", 1), 2) < 90
+    ]
+    flow_coverage.sort(key=lambda x: x['coverage'])
+
+    if flow_coverage:
+        section += "\n\n### \U0001F501 Top 10 Flows with <90% Coverage\n| Flow Name | Type | Coverage % | Uncovered Elements |\n|-----------|------|-------------|---------------------|\n"
+        for flow in flow_coverage[:10]:
+            section += f"| `{flow['flowName']}` | {flow['processType']} | {flow['coverage']}% | {flow['uncovered']} |\n"
+
+    return section
+
+def format_slowest_tests(details: dict) -> str:
+    test_successes = details.get("runTestResult", {}).get("successes", [])
+    slowest_tests = sorted(
+        [t for t in test_successes if "time" in t],
+        key=lambda t: t["time"],
+        reverse=True
+    )[:10]
+
+    if not slowest_tests:
+        return ""
+
+    section = "\n\n### 🐢 Top 10 Slowest Apex Test Methods\n| Class | Method | Time (s) |\n|--------|--------|----------|\n"
+    for test in slowest_tests:
+        section += f"| `{test['name']}` | `{test['methodName']}` | {test['time']} |\n"
+
+    return section
+
+def extract_comments(details: dict) -> List[Dict[str, str]]:
+    comments = []
+    for cf in details.get("componentFailures", []):
+        path = cf.get("fileName")
+        if "changed-sources/" in path:
+            path = path.split("changed-sources/")[1]
+        comments.append({
+            "path": path,
+            "position": 1,
+            "body": f"[{cf.get('componentType')}] {cf.get('problem')}"
         })
+    return comments
 
-coverage_data.sort(key=lambda x: x["coverage"])
+def post_review(env: dict, summary: str, comments: List[Dict[str, str]]):
+    owner, repo = env['GITHUB_REPOSITORY'].split("/")
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{env['PR_NUMBER']}/reviews"
 
-if coverage_data:
-    summary += "\n\n### 🧪 Top 10 Apex Classes with <90% Code Coverage\n| Class | Coverage % | Uncovered Lines |\n|-------|-------------|------------------|\n"
-    for item in coverage_data[:10]:
-        summary += f"| `{item['name']}` | {item['coverage']}% | {item['uncovered']} |\n"
-
-
-# --- Top 10 Flows with <90% Coverage ---
-flow_coverage = details.get("runTestResult", {}).get("flowCoverage", [])
-flow_coverage_data = []
-
-for flow in flow_coverage:
-    total = flow.get("numElements", 0)
-    uncovered = flow.get("numElementsNotCovered", 0)
-    if total == 0:
-        continue
-    coverage_pct = round((total - uncovered) * 100 / total, 2)
-    if coverage_pct < 90:
-        flow_coverage_data.append({
-            "flowName": flow.get("flowName"),
-            "coverage": coverage_pct,
-            "uncovered": uncovered,
-            "processType": flow.get("processType")
-        })
-
-flow_coverage_data.sort(key=lambda x: x["coverage"])
-
-if flow_coverage_data:
-    summary += "\n\n### 🔁 Top 10 Flows with <90% Coverage\n| Flow Name | Type | Coverage % | Uncovered Elements |\n|-----------|------|-------------|---------------------|\n"
-    for flow in flow_coverage_data[:10]:
-        summary += f"| `{flow['flowName']}` | {flow['processType']} | {flow['coverage']}% | {flow['uncovered']} |\n"
-
-# --- Top 10 Slowest Test Methods ---
-slow_methods = []
-
-for test in test_successes:
-    class_name = test.get("name")
-    method_name = test.get("methodName")
-    time_ms = test.get("time", 0)
-
-    if class_name and method_name:
-        slow_methods.append({
-            "class": class_name,
-            "method": method_name,
-            "time": time_ms
-        })
-
-# Sort by time descending
-slow_methods.sort(key=lambda x: x["time"], reverse=True)
-
-if slow_methods:
-    summary += "\n\n### 🐢 Top 10 Slowest Test Methods\n| Class | Method | Time (ms) |\n|--------|--------|------------|\n"
-    for test in slow_methods[:10]:
-        summary += f"| `{test['class']}` | `{test['method']}` | {test['time']} |\n"
-
-        
-# --- Inline Review Comments ---
-comments = []
-for cf in component_failures:
-    path = cf.get("fileName")
-    # Trim file path to repo-relative if needed
-    if "changed-sources/" in path:
-        path = path.split("changed-sources/")[1]
-    comment = {
-        "path": path,
-        "position": 1,  # Fallback line number — GitHub requires it
-        "body": f"[{cf.get('componentType')}] {cf.get('problem')}"
+    headers = {
+        "Authorization": f"Bearer {env['TOKEN_GITHUB']}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
     }
-    comments.append(comment)
 
-# --- Determine Review Event ---
-event = "COMMENT"
+    payload = {
+        "commit_id": env['COMMIT_ID'],
+        "body": summary,
+        "event": "COMMENT",
+        "comments": comments
+    }
 
-# --- GitHub API: PR Review ---
-headers = {
-    "Authorization": f"Bearer {github_token}",
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28"
-}
+    logging.info("Submitting PR review...")
+    response = requests.post(url, headers=headers, json=payload)
 
-review_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+    if response.status_code in (200, 201):
+        print(f"{GREEN_TEXT}✅ Review submitted successfully!{RESET}")
+    else:
+        print(f"{RED_TEXT}❌ Failed to submit review: {response.status_code}{RESET}")
+        print(response.text)
+        exit(1)
 
-review_payload = {
-    "commit_id": commit_id,
-    "body": summary,
-    "event": event,
-    "comments": comments
-}
-
-print(f"{YELLOW_TEXT}📤 Submitting PR review as '{event}'...{RESET}")
-response = requests.post(review_url, headers=headers, json=review_payload)
-
-if response.status_code == 200 or response.status_code == 201:
-    print(f"{GREEN_TEXT}✅ Review submitted successfully!{RESET}")
-    if(result.get("success") or name=="NothingToDeploy"):
+    # Decide exit status
+    result = load_json_file("deploymentResult.json").get("result", {})
+    name = load_json_file("deploymentResult.json").get("name", "")
+    if result.get("success") or name == "NothingToDeploy":
         exit(0)
     else:
         exit(1)
-else:
-    print(f"{RED_TEXT}❌ Failed to submit review: {response.status_code}{RESET}")
-    print(response.text)
-    exit(1)
+
+# --- Main Execution ---
+def main():
+    env = get_env_vars()
+    deploy_result = load_json_file("deploymentResult.json")
+    summary = build_summary(deploy_result, env)
+    details = deploy_result.get("result", {}).get("details", {})
+    comments = extract_comments(details)
+    post_review(env, summary, comments)
+    summary += format_slowest_tests(details)
+
+
+if __name__ == "__main__":
+    main()
