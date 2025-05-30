@@ -148,7 +148,30 @@ if flow_coverage_data:
     for flow in flow_coverage_data[:10]:
         summary += f"| `{flow['flowName']}` | {flow['processType']} | {flow['coverage']}% | {flow['uncovered']} |\n"
 
+# --- Top 10 Slowest Test Methods ---
+slow_methods = []
 
+for test in test_successes:
+    class_name = test.get("name")
+    method_name = test.get("methodName")
+    time_ms = test.get("time", 0)
+
+    if class_name and method_name:
+        slow_methods.append({
+            "class": class_name,
+            "method": method_name,
+            "time": time_ms
+        })
+
+# Sort by time descending
+slow_methods.sort(key=lambda x: x["time"], reverse=True)
+
+if slow_methods:
+    summary += "\n\n### 🐢 Top 10 Slowest Test Methods\n| Class | Method | Time (ms) |\n|--------|--------|------------|\n"
+    for test in slow_methods[:10]:
+        summary += f"| `{test['class']}` | `{test['method']}` | {test['time']} |\n"
+
+        
 # --- Inline Review Comments ---
 comments = []
 for cf in component_failures:
