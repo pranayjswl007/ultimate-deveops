@@ -46,7 +46,7 @@ jobs:
         id: create-branch
         run: |
           SAFE_HEAD_REF=$(echo "${{ inputs.head-ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          PROMO_BRANCH="promotion-${SAFE_HEAD_REF}-to-${{ inputs.base-ref }}"
+          PROMO_BRANCH="promotion-ga-${SAFE_HEAD_REF}-to-${{ inputs.base-ref }}"
           echo "promo_branch=$PROMO_BRANCH" >> "$GITHUB_OUTPUT"
 
           git checkout "${{ inputs.head-ref }}"
