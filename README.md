@@ -27,17 +27,17 @@ This repository includes a set of automated workflows and scripts to streamline 
 
 All workflows are defined in [`.github/workflows/`](.github/workflows/):
 
-- **auto-promote.yml**: Automatically promotes merged PRs to higher environments (e.g., from `develop` to `main`).
+- **auto-promote.yml**: Promotes merged pull requests to higher environments (e.g., from `develop` to `main`).
 - **changeset-downloader.yml**: Downloads and prepares changesets for deployment or validation.
-- **code-scanner.yml**: Runs static code analysis (e.g., PMD) and posts results as PR comments.
-- **deploy.yml**: Handles deployment of code to Salesforce orgs, including test execution and artifact management.
-- **validate.yml**: Validates PRs by running test deployments and reporting results.
+- **code-scanner.yml**: Runs static code analysis (using PMD via `devops/pmdCommentor.py`) and posts results as PR comments.
+- **deploy.yml**: Deploys code to Salesforce orgs, runs tests, manages artifacts, and posts deployment summaries to PRs (using `devops/prUpdated.py`).
+- **validate.yml**: Validates PRs by running test deployments and reporting results (using `devops/prUpdated.py`).
 
 Each workflow is triggered by specific GitHub events (e.g., PR opened, push, or manual dispatch).
 
 ---
 
-## How to Call a Workflow from Another Repository
+## How to Reuse a Workflow in Another Repository
 
 You can reuse workflows from this repository in other repositories using GitHub Actions' `workflow_call` feature.
 
@@ -90,7 +90,7 @@ All scripts are located in [`devops/`](devops/):
 
 ### 1. [`prUpdated.py`](devops/prUpdated.py)
 
-**Purpose:**  
+**Purpose:**
 Posts a detailed deployment/validation summary as a review on the PR, including test results, code/flow coverage, and inline comments for component failures.
 
 **How it works:**
@@ -99,7 +99,7 @@ Posts a detailed deployment/validation summary as a review on the PR, including 
 - Posts a PR review with a markdown summary and line-level comments.
 - Exits with status 0 (success) or 1 (failure).
 
-**Usage:**  
+**Usage:**
 Set required environment variables (`PR_NUMBER`, `GITHUB_REPOSITORY`, `TOKEN_GITHUB`, `COMMIT_ID`, etc.) and run:
 ```sh
 python devops/prUpdated.py
@@ -107,7 +107,7 @@ python devops/prUpdated.py
 
 ### 2. [`pmdCommentor.py`](devops/pmdCommentor.py)
 
-**Purpose:**  
+**Purpose:**
 Posts PMD static code analysis results as line-level comments on the PR.
 
 **How it works:**
@@ -115,7 +115,7 @@ Posts PMD static code analysis results as line-level comments on the PR.
 - Deletes old PMD comments.
 - Groups and posts new line-level comments for each violation.
 
-**Usage:**  
+**Usage:**
 Set required environment variables and run:
 ```sh
 python devops/pmdCommentor.py
@@ -123,18 +123,18 @@ python devops/pmdCommentor.py
 
 ### 3. [`prDeployPreProcessor.py`](devops/prDeployPreProcessor.py)
 
-**Purpose:**  
+**Purpose:**
 Fetches the latest PR review comment from GitHub Actions and extracts deployment metadata (e.g., artifact URL, deployment ID) to set as environment variables for downstream jobs.
 
-**Usage:**  
+**Usage:**
 Run as part of your workflow before deployment steps.
 
 ### 4. [`promotion_handler.py`](devops/promotion_handler.py)
 
-**Purpose:**  
+**Purpose:**
 Automates the creation of promotion PRs between branches and manages PR comments/closure for promotion workflows.
 
-**Usage:**  
+**Usage:**
 Set required environment variables (`REPO`, `PROMO_BRANCH`, `BASE_BRANCH`, `SOURCE_PR`, `GH_PAT`) and run:
 ```sh
 python devops/promotion_handler.py
@@ -142,7 +142,7 @@ python devops/promotion_handler.py
 
 ### 5. [`quickDeploymentResultChecker.py`](devops/quickDeploymentResultChecker.py)
 
-**Purpose:**  
+**Purpose:**
 Quickly checks and prints deployment results for debugging or CI feedback.
 
 ---
@@ -176,11 +176,11 @@ pip install -r devops/requirements.txt
 
 A typical PR validation workflow might look like:
 
-1. **Run static code analysis:**  
+1. **Run static code analysis:**
    `python devops/pmdCommentor.py`
-2. **Deploy or validate changes:**  
+2. **Deploy or validate changes:**
    (Salesforce CLI or custom deployment script)
-3. **Post deployment summary to PR:**  
+3. **Post deployment summary to PR:**
    `python devops/prUpdated.py`
 
 Promotion and artifact handling are managed by their respective scripts and workflows.
