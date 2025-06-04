@@ -4,38 +4,42 @@ on:
   workflow_dispatch:
     inputs:
       jira-ticket:
-        description: 'Jira ticket'
+        description: "Jira ticket"
         required: true
       summary:
-        description: 'Enter a summary of the work that was completed'
+        description: "Enter a summary of the work that was completed"
         required: true
       change-set-name:
-        description: 'Change set name'
+        description: "Change set name"
         required: true
       environment:
-        description: 'Which enviornment to pull from'     
+        description: "Which enviornment to pull from"
         required: true
-        default: '' 
+        default: ""
         type: choice
         options:
-        - production
-        - uat 
+          - production
+          - uat
+      runner:
+        required: false
+        type: string
+        default: ubuntu-latest
 
 jobs:
   download-changeset:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     environment: ${{ inputs.environment }}
     steps:
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: "18"
 
-      - name: 'Checkout source code'
+      - name: "Checkout source code"
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: 'Install Salesforce CLI'
+      - name: "Install Salesforce CLI"
         run: |
           wget https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-linux-x64.tar.xz
           mkdir ~/sf
@@ -43,36 +47,35 @@ jobs:
           echo "$HOME/sf/bin" >> $GITHUB_PATH
           ~/sf/bin/sf version
 
-      - name: 'Authenticate using SFDX_AUTH_URL'
-        run: | 
-            echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
-       
-      - name: 'Download the changestes'
+      - name: "Authenticate using SFDX_AUTH_URL"
         run: |
-            sf project retrieve start --package-name "${{ inputs.change-set-name }}"
+          echo ${{ secrets.SF_AUTH_URL }} | sf org login sfdx-url --sfdx-url-stdin -d -s
 
-      - name: 'Move retrieved metadata to force-app'
+      - name: "Download the changestes"
         run: |
-            echo "Moving downloaded components into force-app/main/default"
-            cp -R "${{ inputs.change-set-name }}/main/default/"* force-app/main/default/
-            echo "Contents of force-app/main/default:"
-            ls -R force-app/main/default
+          sf project retrieve start --package-name "${{ inputs.change-set-name }}"
 
-      - name: 'Create feature branch'
+      - name: "Move retrieved metadata to force-app"
         run: |
-              BRANCH_NAME="feature/${{ inputs.jira-ticket }}"
-          
-              git config user.name "github-actions"
-              git config user.email "github-actions@github.com"
-          
-              git checkout -b "$BRANCH_NAME"
-              git add force-app
-          
-              COMMIT_MSG="feat(${{
-                inputs.jira-ticket
-              }}): retrieve changes from '${{ inputs.change-set-name }}' in ${{ inputs.environment }}"
-              git commit -m "$COMMIT_MSG"
-          
-              git push origin "$BRANCH_NAME"
-              echo "Created and pushed branch: $BRANCH_NAME"
-          
+          echo "Moving downloaded components into force-app/main/default"
+          cp -R "${{ inputs.change-set-name }}/main/default/"* force-app/main/default/
+          echo "Contents of force-app/main/default:"
+          ls -R force-app/main/default
+
+      - name: "Create feature branch"
+        run: |
+          BRANCH_NAME="feature/${{ inputs.jira-ticket }}"
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git checkout -b "$BRANCH_NAME"
+          git add force-app
+
+          COMMIT_MSG="feat(${{
+            inputs.jira-ticket
+          }}): retrieve changes from '${{ inputs.change-set-name }}' in ${{ inputs.environment }}"
+          git commit -m "$COMMIT_MSG"
+
+          git push origin "$BRANCH_NAME"
+          echo "Created and pushed branch: $BRANCH_NAME"

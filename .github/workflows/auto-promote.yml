@@ -15,6 +15,10 @@ on:
       repository:
         required: true
         type: string
+      runner:
+        required: false
+        type: string
+        default: ubuntu-latest
 
 permissions:
   contents: write
@@ -22,9 +26,9 @@ permissions:
 
 jobs:
   auto-promote:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     env:
-      GH_PAT: ${{ secrets.GH_PAT }} # 🔐 fixed secret, no input required
+      GH_PAT: ${{ secrets.GH_PAT }}
 
     steps:
       - name: Checkout full repo
@@ -46,7 +50,7 @@ jobs:
         id: create-branch
         run: |
           SAFE_HEAD_REF=$(echo "${{ inputs.head-ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          PROMO_BRANCH="promotion-ga-${SAFE_HEAD_REF}-to-${{ inputs.base-ref }}"
+          PROMO_BRANCH="promotions/${SAFE_HEAD_REF}-to-${{ inputs.base-ref }}"
           echo "promo_branch=$PROMO_BRANCH" >> "$GITHUB_OUTPUT"
 
           git checkout "${{ inputs.head-ref }}"

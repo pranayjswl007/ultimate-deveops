@@ -18,10 +18,14 @@ on:
         required: true
         type: string
         default: develop
+      runner:
+        required: false
+        type: string
+        default: ubuntu-latest
 
 jobs:
   validate-build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     environment:
       name: ${{ inputs.environment-name }}
     steps:
