@@ -1,0 +1,87 @@
+name: Auto Promote PR Branch
+
+on:
+  workflow_call:
+    inputs:
+      pat-secret-name:
+        required: true
+        type: string
+      head-ref:
+        required: true
+        type: string
+      base-ref:
+        required: true
+        type: string
+      pr-number:
+        required: true
+        type: string
+      repository:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-promote:
+    runs-on: ubuntu-latest
+    env:
+      GH_PAT: ${{ secrets[inputs.pat-secret-name] }}
+
+    steps:
+      - name: Checkout full repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone devops helper repo and extract script
+        run: |
+          git clone --depth 1 --branch main https://github.com/pranayjswl007/ultimate-devops.git
+          cp -r ultimate-devops/devops ./devops
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create promotion branch and push
+        id: create-branch
+        run: |
+          SAFE_HEAD_REF=$(echo "${{ inputs.head-ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          PROMO_BRANCH="promotion-${SAFE_HEAD_REF}-to-${{ inputs.base-ref }}"
+          echo "promo_branch=$PROMO_BRANCH" >> "$GITHUB_OUTPUT"
+
+          git checkout "${{ inputs.head-ref }}"
+          git checkout -b "$PROMO_BRANCH"
+          git push origin "$PROMO_BRANCH"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Python dependencies
+        run: |
+          if [ -f "./devops/requirements.txt" ]; then
+            pip install -r ./devops/requirements.txt
+          fi
+
+      - name: Handle promotion PR via Python
+        id: handle-pr
+        run: python ./devops/scripts/promotion_handler.py
+        env:
+          PROMO_BRANCH: ${{ steps.create-branch.outputs.promo_branch }}
+          BASE_BRANCH: ${{ inputs.base-ref }}
+          SOURCE_PR: ${{ inputs.pr-number }}
+          REPO: ${{ inputs.repository }}
+          GH_PAT: ${{ secrets[inputs.pat-secret-name] }}
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Promotion Workflow Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Original PR**: #${{ inputs.pr-number }} (closed)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Promotion Branch**: \`${{ steps.create-branch.outputs.promo_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **New PR**: #${{ steps.handle-pr.outputs.new_pr_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target**: ${{ inputs.base-ref }}" >> $GITHUB_STEP_SUMMARY
