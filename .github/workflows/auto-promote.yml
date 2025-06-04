@@ -73,7 +73,7 @@ jobs:
 
       - name: Handle promotion PR via Python
         id: handle-pr
-        run: python ./devops/scripts/promotion_handler.py
+        run: python ./devops/promotion_handler.py
         env:
           PROMO_BRANCH: ${{ steps.create-branch.outputs.promo_branch }}
           BASE_BRANCH: ${{ inputs.base-ref }}
