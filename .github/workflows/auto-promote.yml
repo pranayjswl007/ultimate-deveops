@@ -3,9 +3,6 @@ name: Auto Promote PR Branch
 on:
   workflow_call:
     inputs:
-      pat-secret-name:
-        required: true
-        type: string
       head-ref:
         required: true
         type: string
@@ -19,10 +16,6 @@ on:
         required: true
         type: string
 
-    secrets:
-      pat-secret-name: # 👈 must be defined here as well
-        required: true
-
 permissions:
   contents: write
   pull-requests: write
@@ -31,7 +24,7 @@ jobs:
   auto-promote:
     runs-on: ubuntu-latest
     env:
-      GH_PAT: ${{ secrets[inputs.pat-secret-name] }}
+      GH_PAT: ${{ secrets.GH_PAT }} # 🔐 fixed secret, no input required
 
     steps:
       - name: Checkout full repo
@@ -79,7 +72,7 @@ jobs:
           BASE_BRANCH: ${{ inputs.base-ref }}
           SOURCE_PR: ${{ inputs.pr-number }}
           REPO: ${{ inputs.repository }}
-          GH_PAT: ${{ secrets[inputs.pat-secret-name] }}
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Summary
         run: |
