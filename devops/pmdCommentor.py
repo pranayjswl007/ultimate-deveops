@@ -7,14 +7,15 @@ from tqdm import tqdm
 from rich.console import Console
 from rich.panel import Panel
 
+# ────────────────────────────────────────────────────────────────────────────────
 # Rich console
 console = Console()
 
 # Environment variables
-pr_number = os.environ.get('PR_NUMBER')
+pr_number         = os.environ.get('PR_NUMBER')
 github_repository = os.environ.get('GITHUB_REPOSITORY')
-github_token = os.environ.get('TOKEN_GITHUB')
-commit_id = os.environ.get('COMMIT_ID')
+github_token      = os.environ.get('TOKEN_GITHUB')
+commit_id         = os.environ.get('COMMIT_ID')
 
 console.rule("[bold cyan]GitHub Context")
 console.print(f"[bold green]Repository:[/bold green] {github_repository}")
@@ -23,17 +24,19 @@ console.print(f"[bold green]Commit ID:[/bold green] {commit_id}")
 
 pmd_violations_file = "apexScanResults.json"
 
+# ────────────────────────────────────────────────────────────────────────────────
 # Load scan results
 try:
     with open(pmd_violations_file, "r") as file:
         scan_results = json.load(file)
-        console.print_json(data=scan_results)    
+        console.print_json(data=scan_results)
         violations = scan_results.get("violations", [])
         console.print(f"[bold green]✅ Loaded {len(violations)} violation(s).[/bold green]")
 except (FileNotFoundError, json.JSONDecodeError) as e:
     console.print(f"[bold red]❌ Error reading {pmd_violations_file}: {e}[/bold red]")
     exit(1)
 
+# ────────────────────────────────────────────────────────────────────────────────
 # Step 1: Delete old inline PMD comments
 console.rule("[bold yellow]🧹 Cleaning up old PMD comments")
 comments_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
@@ -61,11 +64,11 @@ for comment in comments_data:
 
 console.print(f"[bold green]✅ Deleted {deleted} old PMD comment(s).")
 
-# Step 2: Prepare grouped line-level comments
+# ────────────────────────────────────────────────────────────────────────────────
+# Step 2: Prepare grouped line‐level comments
 console.rule("[bold cyan]🛠️ Preparing Line Comments")
 line_comments = []
 
-violations_by_file = defaultdict(list)
 for v in violations:
     primary_index = v.get("primaryLocationIndex", 0)
     if not isinstance(primary_index, int) or primary_index >= len(v.get("locations", [])):
@@ -76,63 +79,94 @@ for v in violations:
     try:
         file_path = raw_file.split("changed-sources/")[1]
     except IndexError:
-        file_path = raw_file 
+        file_path = raw_file
 
     line = loc.get("startLine", 1)
     if not isinstance(line, int) or line < 1:
         line = 1
 
-    message = v.get("message", "No message provided").replace("|", "\\|")  # Escape pipes
-    rule = v.get("rule", "Unknown Rule")
-    engine = v.get("engine", "Unknown Engine")
+    message = v.get("message", "No message provided").replace("|", "\\|")
+    rule     = v.get("rule", "Unknown Rule")
+    engine   = v.get("engine", "Unknown Engine")
     severity = v.get("severity", "Unknown Severity")
-    url = v.get("resources", [""])[0] if v.get("resources") else ""
+    url      = v.get("resources", [""])[0] if v.get("resources") else ""
 
     markdown_table = (
         "| Detail | Value |\n"
         "|--------|-------|\n"
-        f"| Rule | {rule} |\n"
-        f"| Engine | {engine} |\n"
+        f"| Rule     | {rule} |\n"
+        f"| Engine   | {engine} |\n"
         f"| Severity | {severity} |\n"
-        f"| Message | {message} |\n"
-        f"| More Info | [link]({url}) |"
+        f"| Message  | {message} |\n"
+        f"| More Info| [link]({url}) |"
     )
-    # check file_path if null continue
+
     if not file_path:
         console.print(f"[red]⚠️ File path is empty for violation: {v}[/red]")
         continue
 
     line_comments.append({
-        "path": file_path,
-        "line": line,
-        "side": "RIGHT",
+        "path":      file_path,
+        "line":      line,
+        "side":      "RIGHT",
         "commit_id": commit_id,
-        "body": f"\n\n{markdown_table}"
+        "body":      f"\n\n{markdown_table}"
     })
+
 console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} line comment(s)."))
 
-# Step 3: Post line-level comments
+# If there are no violations, exit early.
+if not line_comments:
+    console.print("[bold green]✅ No inline violations to post. Exiting.[/bold green]")
+    exit(0)
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Step 3: Post line‐level comments one by one, with rate‐limit back‐off
 console.rule("[bold green]🚀 Submitting Line Comments")
 post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
 success = 0
-errors = 0
+errors  = 0
 
+# Print out for debugging/payload inspection
 print(json.dumps(line_comments, indent=2))
+
 with tqdm(total=len(line_comments), desc="Posting Comments", ncols=80) as pbar:
-    for c in line_comments:
-       
-        response = requests.post(post_url, json=c, headers=headers)
-        if response.status_code == 201:
-            success += 1
-        else:
-            errors += 1
-            console.print(f"[red]❌ Failed to post comment on {c['path']} (line {c['line']})[/red]")
-            console.print_json(data=response.json())
+    for idx, c in enumerate(line_comments, start=1):
+        while True:
+            response = requests.post(post_url, json=c, headers=headers)
+
+            # 201 => Created successfully
+            if response.status_code == 201:
+                success += 1
+                break
+
+            # 403 with secondary rate‐limit message => back off and retry
+            elif response.status_code == 403:
+                resp_json = response.json()
+                msg = resp_json.get("message", "")
+                if "secondary rate limit" in msg.lower():
+                    # Sleep for 30 seconds before retrying
+                    console.print("[yellow]⚠️ Hit GitHub secondary rate limit. Sleeping 30s…[/yellow]")
+                    time.sleep(30)
+                    continue
+                else:
+                    # Some other 403 (e.g. permission issue), treat as an error
+                    errors += 1
+                    console.print(f"[red]❌ 403 on {c['path']} (line {c['line']}): {msg}[/red]")
+                    break
+
+            # Any other non‐201 is a permanent failure for this comment
+            else:
+                errors += 1
+                console.print(f"[red]❌ Failed to post comment on {c['path']} (line {c['line']}) – Status {response.status_code}[/red]")
+                console.print_json(data=response.json())
+                break
+
+        # After either success (201) or permanent failure, pause before the next POST
+        time.sleep(1)
         pbar.update(1)
-        if success % 10 == 0:
-            time.sleep(1)
 
 console.rule("[bold cyan]📊 Summary")
 console.print(f"[bold green]✅ {success} comment(s) successfully posted.[/bold green]")
 if errors:
-    console.print(f"[bold red]⚠️ {errors} comment(s) failed. Likely not part of PR diff.[/bold red]")
+    console.print(f"[bold red]⚠️ {errors} comment(s) failed. Some likely didn’t map to the PR diff or there was a permissions issue.[/bold red]")
