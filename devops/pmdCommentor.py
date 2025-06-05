@@ -98,12 +98,14 @@ console.rule("[bold cyan]🛠️ Preparing Inline Comments")
 line_comments = []
 overflow_comments = []
 MAX_INLINE = 20
+
 for v in violations:
     primary_index = v.get("primaryLocationIndex", 0)
     locs = v.get("locations", [])
     if primary_index >= len(locs):
         overflow_comments.append(v)
         continue
+    
     loc = locs[primary_index]
     raw_file = loc.get("file", "")
     # Map to repo-relative file path (should match PR diff "filename")
@@ -116,38 +118,46 @@ for v in violations:
     if not isinstance(line, int) or line < 1:
         line = 1
 
+    # Find matching patch for this file
     patch = None
     for file in diff_files:
         if file.get("filename") == file_path:
             patch = file.get("patch")
             break
+    
     if not patch:
         overflow_comments.append(v)
         continue
+    
     position = calculate_diff_position(patch, line)
     if position is None:
         overflow_comments.append(v)
         continue
 
+    # Extract violation details
     message = v.get("message", "No message provided").replace("|", "\\|")
-    rule     = v.get("rule", "Unknown Rule")
-    engine   = v.get("engine", "Unknown Engine")
+    rule = v.get("rule", "Unknown Rule")
+    engine = v.get("engine", "Unknown Engine")
     severity = v.get("severity", "Unknown Severity")
-    url      = v.get("resources", [""])[0] if v.get("resources") else ""
+    url = v.get("resources", [""])[0] if v.get("resources") else ""
+    
+    # Make rule name a hyperlink if URL is available
+    rule_display = f"[{rule}]({url})" if url else rule
+    
     markdown_table = (
         "| Detail   | Value |\n"
         "|----------|-------|\n"
-        f"| Rule     | {rule} |\n"
+        f"| Rule     | {rule_display} |\n"
         f"| Engine   | {engine} |\n"
         f"| Severity | {severity} |\n"
-        f"| Message  | {message} |\n"
-        f"| More Info| [link]({url}) |"
+        f"| Message  | {message} |"
     )
+    
     line_comments.append({
-        "path":      file_path,
-        "position":  position,
+        "path": file_path,
+        "position": position,
         "commit_id": commit_id,
-        "body":      f"\n\n{markdown_table}"
+        "body": f"\n\n{markdown_table}"
     })
 
 console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} valid inline comment(s), {len(overflow_comments)} overflow."))
@@ -158,68 +168,92 @@ overflow_comments += line_comments[MAX_INLINE:]
 
 # Post inline comments
 console.rule("[bold green]🚀 Submitting Inline Comments")
-post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
-success = 0
-errors  = 0
+if inline_to_post:
+    post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
+    success = 0
+    errors = 0
 
-with tqdm(total=len(inline_to_post), desc="Posting Inline", ncols=80) as pbar:
-    for c in inline_to_post:
-        while True:
-            response = requests.post(post_url, json=c, headers=headers)
-            if response.status_code == 201:
-                success += 1
-                break
-            elif response.status_code == 403:
-                resp_json = response.json()
-                msg = resp_json.get("message", "")
-                if "secondary rate limit" in msg.lower():
-                    console.print("[yellow]⚠️ Hit GitHub secondary rate limit. Sleeping 30s…[/yellow]")
-                    time.sleep(30)
-                    continue
+    with tqdm(total=len(inline_to_post), desc="Posting Inline", ncols=80) as pbar:
+        for c in inline_to_post:
+            while True:
+                response = requests.post(post_url, json=c, headers=headers)
+                if response.status_code == 201:
+                    success += 1
+                    break
+                elif response.status_code == 403:
+                    resp_json = response.json()
+                    msg = resp_json.get("message", "")
+                    if "secondary rate limit" in msg.lower():
+                        console.print("[yellow]⚠️ Hit GitHub secondary rate limit. Sleeping 30s…[/yellow]")
+                        time.sleep(30)
+                        continue
+                    else:
+                        errors += 1
+                        console.print(f"[red]❌ 403 on {c['path']} (position {c['position']}): {msg}[/red]")
+                        break
                 else:
                     errors += 1
-                    console.print(f"[red]❌ 403 on {c['path']} (position {c['position']}): {msg}[/red]")
+                    console.print(f"[red]❌ Failed to post on {c['path']} (position {c['position']}) – {response.status_code}[/red]")
+                    console.print_json(data=response.json())
                     break
-            else:
-                errors += 1
-                console.print(f"[red]❌ Failed to post on {c['path']} (position {c['position']}) – {response.status_code}[/red]")
-                console.print_json(data=response.json())
-                break
-        time.sleep(1)
-        pbar.update(1)
+            time.sleep(1)
+            pbar.update(1)
 
-console.rule("[bold cyan]📊 Inline Summary")
-console.print(f"[bold green]✅ {success} inline comment(s) posted.[/bold green]")
-if errors:
-    console.print(f"[bold red]⚠️ {errors} inline comment(s) failed.[/bold red]")
+    console.rule("[bold cyan]📊 Inline Summary")
+    console.print(f"[bold green]✅ {success} inline comment(s) posted.[/bold green]")
+    if errors:
+        console.print(f"[bold red]⚠️ {errors} inline comment(s) failed.[/bold red]")
 
 # Overflow comments as one summary comment (if any)
 if overflow_comments:
     console.rule("[bold magenta]🗄️ Posting Overflow as Table")
     header = "| File | Line | Rule | Severity | Message |\n|------|------|------|----------|----------|\n"
     body_rows = []
+    
     for v in overflow_comments:
-        locs = v.get("locations", [])
-        loc = locs[v.get("primaryLocationIndex", 0)] if locs else {}
-        file_path = loc.get("file", "Unknown")
-        try:
-            file_path = file_path.split("changed-sources/")[1]
-        except IndexError:
-            pass
-        line_no = loc.get("startLine", "?")
-        rule = v.get("rule", "Unknown Rule")
-        severity = v.get("severity", "Unknown Severity")
-        message = v.get("message", "No message provided").replace("|", "\\|").replace("\n", " ")
+        # Handle both violation objects and line_comment objects
+        if isinstance(v, dict) and "path" in v:
+            # This is from line_comments overflow
+            file_path = v["path"]
+            line_no = "?"  # Position-based, no line number stored
+            # Extract from body or use defaults
+            rule = "Unknown Rule"
+            severity = "Unknown Severity"
+            message = "See inline comment details"
+            url = ""
+        else:
+            # This is a violation object
+            locs = v.get("locations", [])
+            loc = locs[v.get("primaryLocationIndex", 0)] if locs else {}
+            file_path = loc.get("file", "Unknown")
+            try:
+                file_path = file_path.split("changed-sources/")[1]
+            except IndexError:
+                pass
+            line_no = loc.get("startLine", "?")
+            rule = v.get("rule", "Unknown Rule")
+            severity = v.get("severity", "Unknown Severity")
+            message = v.get("message", "No message provided")
+            url = v.get("resources", [""])[0] if v.get("resources") else ""
+        
+        # Make rule a hyperlink if URL is available
+        rule_display = f"[{rule}]({url})" if url else rule
+        
+        # Clean up message for table display
+        message = str(message).replace("|", "\\|").replace("\n", " ")
         if len(message) > 100:
             message = message[:97] + "..."
-        body_rows.append(f"| `{file_path}` | {line_no} | {rule} | {severity} | {message} |")
+        
+        body_rows.append(f"| `{file_path}` | {line_no} | {rule_display} | {severity} | {message} |")
+    
     overflow_table = header + "\n".join(body_rows)
     issues_comment_url = f"https://api.github.com/repos/{github_repository}/issues/{pr_number}/comments"
     overflow_payload = {"body": 
-        f"⚠️ **PMD Analysis Results** ({len(overflow_comments)} violations not mapped to diff or over limit):\n\n"
+        f"⚠️ **PMD Analysis Results** ({len(overflow_comments)} violations not mapped to diff or over limit)\n\n"
         "The following violations could not be posted inline due to diff mapping or quantity limits:\n\n" +
         overflow_table
     }
+    
     resp2 = requests.post(issues_comment_url, json=overflow_payload, headers=headers)
     if resp2.status_code == 201:
         console.print("[bold green]✅ Overflow table comment posted successfully![/bold green]")
