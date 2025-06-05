@@ -110,7 +110,13 @@ for v in violations:
         "line":      line,
         "side":      "RIGHT",
         "commit_id": commit_id,
-        "body":      f"\n\n{markdown_table}"
+        "body":      f"\n\n{markdown_table}",
+        # Store raw data for overflow processing
+        "rule":      rule,
+        "message":   v.get("message", "No message provided"),  # Original message without escaping
+        "severity":  severity,
+        "engine":    engine,
+        "url":       url
     })
 
 console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} line comment(s)."))
@@ -188,29 +194,32 @@ if errors:
 # Step 5: If there are overflow_comments, group them into one Markdown table
 if overflow_comments:
     console.rule("[bold magenta]🗄️ Posting Overflow as One Table Comment")
-    # Build a single Markdown table containing all overflow entries.
-    # We’ll use columns: File | Line | Rule | Message
-    header   = "| File | Line | Rule | Message |\n|------|------|------|---------|\n"
+    
+    # Build a properly formatted markdown table
+    header = "| File | Line | Rule | Severity | Message |\n|------|------|------|----------|----------|\n"
     body_rows = []
+    
     for oc in overflow_comments:
-        # The original `body` starts with "\n\n| Detail ...". We only want the Rule and Message fields,
-        # so we can extract those from the markdown_table that we built earlier.
-        # But for simplicity, let’s just flatten the entire markdown_table into one cell. That still
-        # satisfies “a single table comment,” albeit with a bigger cell.
-        entire_md_table = oc["body"].strip()  # that starts with "| Detail | Value |..."
-        # Escape any pipe in the table so it doesn’t break the outer table structure:
-        cell_md = entire_md_table.replace("|", "\\|")
         file_path = oc["path"]
-        line_no   = oc["line"]
-        body_rows.append(f"| `{file_path}` | {line_no} | {cell_md} |")
+        line_no = oc["line"]
+        rule = oc["rule"]
+        severity = oc["severity"]
+        # Escape pipes in the message for proper table formatting
+        message = oc["message"].replace("|", "\\|").replace("\n", " ")
+        
+        # Truncate message if too long to keep table readable
+        if len(message) > 100:
+            message = message[:97] + "..."
+        
+        body_rows.append(f"| `{file_path}` | {line_no} | {rule} | {severity} | {message} |")
 
     overflow_table = header + "\n".join(body_rows)
 
-    # Finally, post as a general PR comment (not inline). Use the Issues API endpoint:
+    # Post as a general PR comment
     issues_comment_url = f"https://api.github.com/repos/{github_repository}/issues/{pr_number}/comments"
     overflow_payload = {"body": 
-        "⚠️ **Too many PMD violations to post inline.**\n\n"
-        "Below is a combined table of the remaining violations:\n\n" +
+        f"⚠️ **PMD Analysis Results** ({len(overflow_comments)} violations)\n\n"
+        "The following violations were found but not posted inline due to GitHub's comment limits:\n\n" +
         overflow_table
     }
 
