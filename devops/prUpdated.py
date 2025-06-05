@@ -150,7 +150,7 @@ if flow_coverage_data:
 
 # --- Top 10 Slowest Test Methods ---
 slow_methods = []
-
+test_successes = details.get("runTestResult", {}).get("successes", [])
 for test in test_successes:
     class_name = test.get("name")
     method_name = test.get("methodName")
