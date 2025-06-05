@@ -216,5 +216,6 @@ if response.status_code == 200 or response.status_code == 201:
         exit(1)
 else:
     print(f"{RED_TEXT}❌ Failed to submit review: {response.status_code}{RESET}")
+    print(review_payload)
     print(response.text)
     exit(1)
