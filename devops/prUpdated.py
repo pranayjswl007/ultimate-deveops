@@ -182,7 +182,9 @@ def post_review(env: dict, summary: str, comments: List[Dict[str, str]]):
         print(f"{GREEN_TEXT}✅ Review submitted successfully!{RESET}")
     else:
         print(f"{RED_TEXT}❌ Failed to submit review: {response.status_code}{RESET}")
+        print(payload)
         print(response.text)
+        
         exit(1)
 
     # Decide exit status
