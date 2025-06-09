@@ -146,7 +146,7 @@ if comments_to_delete:
         elif comment_type == "comment":
             delete_mutation = """
             mutation DeleteComment($commentId: ID!) {
-              deletePullRequestReviewComment(input: {commentId: $commentId}) {
+              deletePullRequestReviewComment(input: {id: $commentId}) {
                 clientMutationId
               }
             }
@@ -155,7 +155,7 @@ if comments_to_delete:
         elif comment_type == "issue_comment":
             delete_mutation = """
             mutation DeleteIssueComment($commentId: ID!) {
-              deleteIssueComment(input: {commentId: $commentId}) {
+              deleteIssueComment(input: {id: $commentId}) {
                 clientMutationId
               }
             }
@@ -168,43 +168,30 @@ if comments_to_delete:
 
 console.print(f"[bold green]✅ Deleted {deleted_count} old PMD comment(s).[/bold green]")
 
-# Get PR files using GraphQL
+# Get PR files using REST API (GraphQL doesn't provide patch data)
 console.rule("[bold cyan]🗂️ Getting PR Files")
-get_files_query = """
-query GetPRFiles($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) {
-    pullRequest(number: $number) {
-      files(first: 100) {
-        nodes {
-          path
-          additions
-          deletions
-          patch
-        }
-      }
-    }
-  }
+
+pr_files_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/files"
+pr_files_headers = {
+    "Authorization": f"Bearer {github_token}",
+    "Accept": "application/vnd.github.v3+json"
 }
-"""
 
-files_data = execute_graphql_query(get_files_query, {
-    "owner": owner,
-    "name": repo_name,
-    "number": int(pr_number)
-})
-
-if not files_data:
-    console.print("[red]❌ Failed to get PR files[/red]")
+pr_files_response = requests.get(pr_files_url, headers=pr_files_headers)
+if pr_files_response.status_code != 200:
+    console.print(f"[red]❌ Failed to get PR files: {pr_files_response.status_code}[/red]")
+    console.print_json(data=pr_files_response.json())
     exit(1)
 
-pr_files = files_data["repository"]["pullRequest"]["files"]["nodes"]
+pr_files = pr_files_response.json()
 console.print(f"[bold green]✅ Found {len(pr_files)} changed files in PR[/bold green]")
 
 # Build file mapping with line numbers that can accept comments
 changed_files = {}
 for file_data in pr_files:
-    filename = file_data['path']
-    if file_data.get('patch'):
+    filename = file_data['filename']  # REST API uses 'filename' not 'path'
+    # Only process files that have changes (not just renamed/moved)
+    if file_data['status'] in ['added', 'modified'] and file_data.get('patch'):
         changed_files[filename] = {
             'patch': file_data['patch'],
             'valid_lines': set()
