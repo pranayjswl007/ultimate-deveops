@@ -2,6 +2,8 @@ import os
 import json
 import requests
 import time
+import subprocess
+import re
 from collections import defaultdict
 from tqdm import tqdm
 from rich.console import Console
@@ -49,7 +51,7 @@ if response.status_code != 200:
 comments_data = response.json()
 deleted = 0
 for comment in comments_data:
-    if "| Detail" in comment.get("body", ""):
+    if "🔍 **PMD Analysis**" in comment.get("body", "") or "| Detail" in comment.get("body", ""):
         delete_url = comment["url"]
         del_response = requests.delete(delete_url, headers=headers)
         if del_response.status_code == 204:
@@ -58,82 +60,150 @@ for comment in comments_data:
             console.print(f"[red]⚠️ Failed to delete comment ID {comment['id']}[/red]")
 console.print(f"[bold green]✅ Deleted {deleted} old PMD comment(s).")
 
-# Fetch PR changed files and patches (for mapping violations to diff positions)
-console.rule("[bold cyan]🗂️ Fetching PR Diff Files")
-diff_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/files"
-diff_response = requests.get(diff_url, headers=headers)
-if diff_response.status_code != 200:
-    console.print("[red]❌ Failed to fetch PR diff files[/red]")
+# Get PR information to get base and head branches
+console.rule("[bold cyan]🔍 Getting PR Information")
+pr_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}"
+pr_response = requests.get(pr_url, headers=headers)
+if pr_response.status_code != 200:
+    console.print("[red]❌ Failed to fetch PR information[/red]")
     exit(1)
-diff_files = diff_response.json()
 
-def calculate_diff_position(patch, target_line):
-    """Given a unified diff `patch` and a `target_line` in the new file,
-    return the position index (0-based) used by GitHub's PR comment API."""
-    position = 0
-    current_line = None
-    for line in patch.splitlines():
-        if line.startswith('@@'):
-            # e.g., @@ -5,10 +5,20 @@
-            parts = line.split(' ')
-            new_file_range = parts[2]  # "+5,20"
-            new_file_start = int(new_file_range.split(',')[0][1:])
-            current_line = new_file_start
-            position += 1
-        elif line.startswith('+'):
-            if current_line == target_line:
-                return position
-            current_line += 1
-            position += 1
-        elif line.startswith('-'):
-            position += 1  # Still counts for position, but not line number
-        else:
-            if current_line is not None:
+pr_data = pr_response.json()
+base_ref = pr_data['base']['ref']
+head_ref = pr_data['head']['ref']
+base_sha = pr_data['base']['sha']
+head_sha = pr_data['head']['sha']
+console.print(f"[bold green]Base branch:[/bold green] {base_ref} ({base_sha[:8]})")
+console.print(f"[bold green]Head branch:[/bold green] {head_ref} ({head_sha[:8]})")
+
+# Get PR files using GitHub API (more reliable than git diff)
+console.rule("[bold cyan]🗂️ Getting PR Files")
+pr_files_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/files"
+pr_files_response = requests.get(pr_files_url, headers=headers)
+if pr_files_response.status_code != 200:
+    console.print(f"[red]❌ Failed to fetch PR files: {pr_files_response.status_code}[/red]")
+    exit(1)
+
+pr_files = pr_files_response.json()
+console.print(f"[bold green]✅ Found {len(pr_files)} changed files in PR[/bold green]")
+
+# Build file mapping with line numbers that can accept comments
+changed_files = {}
+for file_data in pr_files:
+    filename = file_data['filename']
+    # Only process files that have changes (not just renamed/moved)
+    if file_data['status'] in ['added', 'modified'] and file_data.get('patch'):
+        changed_files[filename] = {
+            'patch': file_data['patch'],
+            'valid_lines': set()
+        }
+        
+        # Parse patch to find lines that can receive comments
+        patch_lines = file_data['patch'].split('\n')
+        current_line = 0
+        
+        for line in patch_lines:
+            if line.startswith('@@'):
+                # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
+                match = re.match(r'@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@', line)
+                if match:
+                    current_line = int(match.group(1))
+            elif line.startswith('+') and not line.startswith('+++'):
+                # This is a new line that can receive comments
+                changed_files[filename]['valid_lines'].add(current_line)
                 current_line += 1
-            position += 1
+            elif line.startswith(' '):
+                # Context line
+                changed_files[filename]['valid_lines'].add(current_line)
+                current_line += 1
+            # Lines starting with '-' don't increment current_line
+
+console.print(f"[bold green]✅ Processed {len(changed_files)} files with changes[/bold green]")
+for filename, data in changed_files.items():
+    console.print(f"[dim]  - {filename}: {len(data['valid_lines'])} commentable lines[/dim]")
+
+def normalize_file_path(raw_file_path):
+    """Normalize file path to match PR files"""
+    if "changed-sources/" in raw_file_path:
+        try:
+            normalized = raw_file_path.split("changed-sources/")[1]
+        except IndexError:
+            normalized = raw_file_path
+    else:
+        normalized = raw_file_path
+    
+    # Remove common prefixes
+    prefixes_to_remove = ["./", "/"]
+    for prefix in prefixes_to_remove:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+    
+    return normalized
+
+def find_matching_file(file_path, available_files):
+    """Find the best matching file from PR files"""
+    file_path = normalize_file_path(file_path)
+    
+    # Direct match
+    if file_path in available_files:
+        return file_path
+    
+    # Try filename only match
+    filename = file_path.split('/')[-1]
+    for available_file in available_files:
+        if available_file.endswith('/' + filename) or available_file == filename:
+            return available_file
+    
+    # Try partial path matching (end matching)
+    for available_file in available_files:
+        if available_file.endswith(file_path) or file_path.endswith(available_file):
+            return available_file
+            
     return None
 
-# Prepare inline comments (with positions)
+# Prepare inline comments
 console.rule("[bold cyan]🛠️ Preparing Inline Comments")
 line_comments = []
 overflow_comments = []
 MAX_INLINE = 20
 
-for v in violations:
+for i, v in enumerate(violations):
+    console.print(f"[dim]Processing violation {i+1}/{len(violations)}[/dim]")
+    
     primary_index = v.get("primaryLocationIndex", 0)
     locs = v.get("locations", [])
     if primary_index >= len(locs):
+        console.print(f"[yellow]Violation {i+1}: Invalid primary location index[/yellow]")
         overflow_comments.append(v)
         continue
     
     loc = locs[primary_index]
     raw_file = loc.get("file", "")
-    # Map to repo-relative file path (should match PR diff "filename")
-    try:
-        file_path = raw_file.split("changed-sources/")[1]
-    except IndexError:
-        file_path = raw_file
-
-    line = loc.get("startLine", 1)
+    
+    # Find the matching file in our PR files
+    matched_file = find_matching_file(raw_file, changed_files.keys())
+    if not matched_file:
+        console.print(f"[yellow]Violation {i+1}: No matching PR file for {raw_file}[/yellow]")
+        console.print(f"[yellow]  Available files: {list(changed_files.keys())[:3]}...[/yellow]")
+        overflow_comments.append(v)
+        continue
+    
+    line = loc.get("startLine")
     if not isinstance(line, int) or line < 1:
-        line = 1
-
-    # Find matching patch for this file
-    patch = None
-    for file in diff_files:
-        if file.get("filename") == file_path:
-            patch = file.get("patch")
-            break
+        line = loc.get("line", 1)
+        if not isinstance(line, int) or line < 1:
+            line = 1
     
-    if not patch:
+    # Check if this line can receive comments
+    valid_lines = changed_files[matched_file]['valid_lines']
+    if line not in valid_lines:
+        console.print(f"[yellow]Violation {i+1}: Line {line} not in valid lines for {matched_file}[/yellow]")
+        console.print(f"[yellow]  Valid lines: {sorted(list(valid_lines))[:10]}...[/yellow]")
         overflow_comments.append(v)
         continue
     
-    position = calculate_diff_position(patch, line)
-    if position is None:
-        overflow_comments.append(v)
-        continue
-
+    console.print(f"[green]Violation {i+1}: Found valid line {line} for {matched_file}[/green]")
+    
     # Extract violation details
     message = v.get("message", "No message provided").replace("|", "\\|")
     rule = v.get("rule", "Unknown Rule")
@@ -153,88 +223,79 @@ for v in violations:
         f"| Message  | {message} |"
     )
     
-    line_comments.append({
-        "path": file_path,
-        "position": position,
-        "commit_id": commit_id,
-        "body": f"\n\n{markdown_table}"
-    })
+    comment_data = {
+        "path": matched_file,
+        "line": line,  # Use line instead of position for simplicity
+        "body": f"🔍 **PMD Analysis**\n\n{markdown_table}"
+    }
+    
+    line_comments.append(comment_data)
 
 console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} valid inline comment(s), {len(overflow_comments)} overflow."))
 
-# Only post up to MAX_INLINE inline, rest as summary
-inline_to_post = line_comments[:MAX_INLINE]
-overflow_comments += line_comments[MAX_INLINE:]
-
 # Post inline comments
 console.rule("[bold green]🚀 Submitting Inline Comments")
-if inline_to_post:
-    post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
-    success = 0
-    errors = 0
-
-    with tqdm(total=len(inline_to_post), desc="Posting Inline", ncols=80) as pbar:
-        for c in inline_to_post:
-            while True:
-                response = requests.post(post_url, json=c, headers=headers)
-                if response.status_code == 201:
-                    success += 1
-                    break
-                elif response.status_code == 403:
-                    resp_json = response.json()
-                    msg = resp_json.get("message", "")
-                    if "secondary rate limit" in msg.lower():
-                        console.print("[yellow]⚠️ Hit GitHub secondary rate limit. Sleeping 30s…[/yellow]")
-                        time.sleep(30)
-                        continue
-                    else:
-                        errors += 1
-                        console.print(f"[red]❌ 403 on {c['path']} (position {c['position']}): {msg}[/red]")
-                        break
-                else:
-                    errors += 1
-                    console.print(f"[red]❌ Failed to post on {c['path']} (position {c['position']}) – {response.status_code}[/red]")
-                    console.print_json(data=response.json())
-                    break
+if line_comments:
+    # Use the review API for better reliability
+    review_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/reviews"
+    
+    # Prepare review with inline comments
+    review_data = {
+        "commit_id": commit_id,
+        "body": f"🔍 **PMD Analysis Results**\n\nFound {len(line_comments)} code quality issues in this PR.",
+        "event": "COMMENT",
+        "comments": line_comments
+    }
+    
+    console.print(f"[dim]Posting review with {len(line_comments)} inline comments[/dim]")
+    response = requests.post(review_url, json=review_data, headers=headers)
+    
+    if response.status_code == 200:
+        console.print(f"[bold green]✅ Successfully posted review with {len(line_comments)} inline comments![/bold green]")
+    else:
+        console.print(f"[bold red]❌ Failed to post review: {response.status_code}[/bold red]")
+        console.print_json(data=response.json())
+        
+        # Fallback: try posting individual comments
+        console.print("[yellow]⚠️ Falling back to individual comment posting...[/yellow]")
+        post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
+        success = 0
+        errors = 0
+        
+        for i, comment in enumerate(line_comments):
+            # Add commit_id for individual comments
+            comment["commit_id"] = commit_id
+            
+            response = requests.post(post_url, json=comment, headers=headers)
+            if response.status_code == 201:
+                success += 1
+                console.print(f"[green]✅ Posted individual comment {i+1}[/green]")
+            else:
+                errors += 1
+                console.print(f"[red]❌ Failed individual comment {i+1}: {response.status_code}[/red]")
+                if response.status_code == 422:
+                    console.print(f"[red]  Error: {response.json()}[/red]")
             time.sleep(1)
-            pbar.update(1)
-
-    console.rule("[bold cyan]📊 Inline Summary")
-    console.print(f"[bold green]✅ {success} inline comment(s) posted.[/bold green]")
-    if errors:
-        console.print(f"[bold red]⚠️ {errors} inline comment(s) failed.[/bold red]")
+        
+        console.print(f"[bold yellow]Fallback results: {success} success, {errors} errors[/bold yellow]")
 
 # Overflow comments as one summary comment (if any)
 if overflow_comments:
     console.rule("[bold magenta]🗄️ Posting Overflow as Table")
-    header = "| File | Line | Rule | Severity | Message |\n|------|------|------|----------|----------|\n"
+    header = "| File | Line | Rule | Severity | Message |\n|------|------|----------|----------|----------|\n"
     body_rows = []
     
     for v in overflow_comments:
-        # Handle both violation objects and line_comment objects
-        if isinstance(v, dict) and "path" in v:
-            # This is from line_comments overflow
-            file_path = v["path"]
-            line_no = "?"  # Position-based, no line number stored
-            # Extract from body or use defaults
-            rule = "Unknown Rule"
-            severity = "Unknown Severity"
-            message = "See inline comment details"
-            url = ""
-        else:
-            # This is a violation object
-            locs = v.get("locations", [])
-            loc = locs[v.get("primaryLocationIndex", 0)] if locs else {}
-            file_path = loc.get("file", "Unknown")
-            try:
-                file_path = file_path.split("changed-sources/")[1]
-            except IndexError:
-                pass
-            line_no = loc.get("startLine", "?")
-            rule = v.get("rule", "Unknown Rule")
-            severity = v.get("severity", "Unknown Severity")
-            message = v.get("message", "No message provided")
-            url = v.get("resources", [""])[0] if v.get("resources") else ""
+        # Extract violation details
+        locs = v.get("locations", [])
+        loc = locs[v.get("primaryLocationIndex", 0)] if locs else {}
+        file_path = normalize_file_path(loc.get("file", "Unknown"))
+        line_no = loc.get("startLine", "?")
+        
+        rule = v.get("rule", "Unknown Rule")
+        severity = v.get("severity", "Unknown Severity")
+        message = v.get("message", "No message provided")
+        url = v.get("resources", [""])[0] if v.get("resources") else ""
         
         # Make rule a hyperlink if URL is available
         rule_display = f"[{rule}]({url})" if url else rule
@@ -249,8 +310,8 @@ if overflow_comments:
     overflow_table = header + "\n".join(body_rows)
     issues_comment_url = f"https://api.github.com/repos/{github_repository}/issues/{pr_number}/comments"
     overflow_payload = {"body": 
-        f"⚠️ **PMD Analysis Results** ({len(overflow_comments)} violations not mapped to diff or over limit)\n\n"
-        "The following violations could not be posted inline due to diff mapping or quantity limits:\n\n" +
+        f"⚠️ **PMD Analysis Results** ({len(overflow_comments)} violations not mapped to changed lines)\n\n"
+        "The following violations could not be posted inline because they don't correspond to lines changed in this PR:\n\n" +
         overflow_table
     }
     
