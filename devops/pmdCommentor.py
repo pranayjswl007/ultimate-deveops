@@ -5,7 +5,6 @@ import time
 import subprocess
 import re
 from collections import defaultdict
-from tqdm import tqdm
 from rich.console import Console
 from rich.panel import Panel
 
@@ -34,65 +33,178 @@ except (FileNotFoundError, json.JSONDecodeError) as e:
     console.print(f"[bold red]❌ Error reading {pmd_violations_file}: {e}[/bold red]")
     exit(1)
 
-# Delete old PMD inline comments
-console.rule("[bold yellow]🧹 Cleaning up old PMD comments")
-comments_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
+# GraphQL endpoint
+graphql_url = "https://api.github.com/graphql"
 headers = {
     "Authorization": f"Bearer {github_token}",
-    "Accept": "application/vnd.github.v3+json"
+    "Content-Type": "application/json"
 }
 
-response = requests.get(comments_url, headers=headers)
-if response.status_code != 200:
-    console.print(f"[red]❌ Failed to fetch PR comments: {response.status_code}[/red]")
-    console.print_json(data=response.json())
+def execute_graphql_query(query, variables=None):
+    """Execute a GraphQL query/mutation"""
+    payload = {
+        "query": query,
+        "variables": variables or {}
+    }
+    
+    response = requests.post(graphql_url, json=payload, headers=headers)
+    
+    if response.status_code != 200:
+        console.print(f"[red]❌ GraphQL request failed: {response.status_code}[/red]")
+        console.print_json(data=response.json())
+        return None
+    
+    result = response.json()
+    if "errors" in result:
+        console.print("[red]❌ GraphQL errors:[/red]")
+        console.print_json(data=result["errors"])
+        return None
+    
+    return result["data"]
+
+# Delete old PMD comments using GraphQL
+console.rule("[bold yellow]🧹 Cleaning up old PMD comments")
+
+# First, get PR node ID and existing comments
+get_pr_query = """
+query GetPRInfo($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      id
+      headRefOid
+      baseRefOid
+      reviews(first: 100) {
+        nodes {
+          id
+          body
+          comments(first: 100) {
+            nodes {
+              id
+              body
+            }
+          }
+        }
+      }
+      comments(first: 100) {
+        nodes {
+          id
+          body
+        }
+      }
+    }
+  }
+}
+"""
+
+owner, repo_name = github_repository.split('/')
+pr_data = execute_graphql_query(get_pr_query, {
+    "owner": owner,
+    "name": repo_name,
+    "number": int(pr_number)
+})
+
+if not pr_data:
+    console.print("[red]❌ Failed to get PR information[/red]")
     exit(1)
 
-comments_data = response.json()
-deleted = 0
-for comment in comments_data:
+pr_node_id = pr_data["repository"]["pullRequest"]["id"]
+head_oid = pr_data["repository"]["pullRequest"]["headRefOid"]
+console.print(f"[bold green]PR Node ID:[/bold green] {pr_node_id}")
+console.print(f"[bold green]Head OID:[/bold green] {head_oid}")
+
+# Delete old PMD comments
+deleted_count = 0
+comments_to_delete = []
+
+# Check review comments
+for review in pr_data["repository"]["pullRequest"]["reviews"]["nodes"]:
+    if "🔍 **PMD Analysis**" in review.get("body", ""):
+        comments_to_delete.append(("review", review["id"]))
+    for comment in review["comments"]["nodes"]:
+        if "🔍 **PMD Analysis**" in comment.get("body", "") or "| Detail" in comment.get("body", ""):
+            comments_to_delete.append(("comment", comment["id"]))
+
+# Check PR comments
+for comment in pr_data["repository"]["pullRequest"]["comments"]["nodes"]:
     if "🔍 **PMD Analysis**" in comment.get("body", "") or "| Detail" in comment.get("body", ""):
-        delete_url = comment["url"]
-        del_response = requests.delete(delete_url, headers=headers)
-        if del_response.status_code == 204:
-            deleted += 1
-        else:
-            console.print(f"[red]⚠️ Failed to delete comment ID {comment['id']}[/red]")
-console.print(f"[bold green]✅ Deleted {deleted} old PMD comment(s).")
+        comments_to_delete.append(("issue_comment", comment["id"]))
 
-# Get PR information to get base and head branches
-console.rule("[bold cyan]🔍 Getting PR Information")
-pr_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}"
-pr_response = requests.get(pr_url, headers=headers)
-if pr_response.status_code != 200:
-    console.print("[red]❌ Failed to fetch PR information[/red]")
-    exit(1)
+# Delete comments in batches using GraphQL mutations
+if comments_to_delete:
+    console.print(f"[yellow]Found {len(comments_to_delete)} old PMD comments to delete[/yellow]")
+    
+    for comment_type, comment_id in comments_to_delete:
+        if comment_type == "review":
+            delete_mutation = """
+            mutation DeleteReview($reviewId: ID!) {
+              deleteReview(input: {reviewId: $reviewId}) {
+                clientMutationId
+              }
+            }
+            """
+            result = execute_graphql_query(delete_mutation, {"reviewId": comment_id})
+        elif comment_type == "comment":
+            delete_mutation = """
+            mutation DeleteComment($commentId: ID!) {
+              deletePullRequestReviewComment(input: {commentId: $commentId}) {
+                clientMutationId
+              }
+            }
+            """
+            result = execute_graphql_query(delete_mutation, {"commentId": comment_id})
+        elif comment_type == "issue_comment":
+            delete_mutation = """
+            mutation DeleteIssueComment($commentId: ID!) {
+              deleteIssueComment(input: {commentId: $commentId}) {
+                clientMutationId
+              }
+            }
+            """
+            result = execute_graphql_query(delete_mutation, {"commentId": comment_id})
+        
+        if result:
+            deleted_count += 1
+        time.sleep(0.5)  # Small delay between deletions
 
-pr_data = pr_response.json()
-base_ref = pr_data['base']['ref']
-head_ref = pr_data['head']['ref']
-base_sha = pr_data['base']['sha']
-head_sha = pr_data['head']['sha']
-console.print(f"[bold green]Base branch:[/bold green] {base_ref} ({base_sha[:8]})")
-console.print(f"[bold green]Head branch:[/bold green] {head_ref} ({head_sha[:8]})")
+console.print(f"[bold green]✅ Deleted {deleted_count} old PMD comment(s).[/bold green]")
 
-# Get PR files using GitHub API (more reliable than git diff)
+# Get PR files using GraphQL
 console.rule("[bold cyan]🗂️ Getting PR Files")
-pr_files_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/files"
-pr_files_response = requests.get(pr_files_url, headers=headers)
-if pr_files_response.status_code != 200:
-    console.print(f"[red]❌ Failed to fetch PR files: {pr_files_response.status_code}[/red]")
+get_files_query = """
+query GetPRFiles($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      files(first: 100) {
+        nodes {
+          path
+          additions
+          deletions
+          patch
+        }
+      }
+    }
+  }
+}
+"""
+
+files_data = execute_graphql_query(get_files_query, {
+    "owner": owner,
+    "name": repo_name,
+    "number": int(pr_number)
+})
+
+if not files_data:
+    console.print("[red]❌ Failed to get PR files[/red]")
     exit(1)
 
-pr_files = pr_files_response.json()
+pr_files = files_data["repository"]["pullRequest"]["files"]["nodes"]
 console.print(f"[bold green]✅ Found {len(pr_files)} changed files in PR[/bold green]")
 
 # Build file mapping with line numbers that can accept comments
 changed_files = {}
 for file_data in pr_files:
-    filename = file_data['filename']
-    # Only process files that have changes (not just renamed/moved)
-    if file_data['status'] in ['added', 'modified'] and file_data.get('patch'):
+    filename = file_data['path']
+    if file_data.get('patch'):
         changed_files[filename] = {
             'patch': file_data['patch'],
             'valid_lines': set()
@@ -119,8 +231,6 @@ for file_data in pr_files:
             # Lines starting with '-' don't increment current_line
 
 console.print(f"[bold green]✅ Processed {len(changed_files)} files with changes[/bold green]")
-for filename, data in changed_files.items():
-    console.print(f"[dim]  - {filename}: {len(data['valid_lines'])} commentable lines[/dim]")
 
 def normalize_file_path(raw_file_path):
     """Normalize file path to match PR files"""
@@ -132,7 +242,6 @@ def normalize_file_path(raw_file_path):
     else:
         normalized = raw_file_path
     
-    # Remove common prefixes
     prefixes_to_remove = ["./", "/"]
     for prefix in prefixes_to_remove:
         if normalized.startswith(prefix):
@@ -154,16 +263,16 @@ def find_matching_file(file_path, available_files):
         if available_file.endswith('/' + filename) or available_file == filename:
             return available_file
     
-    # Try partial path matching (end matching)
+    # Try partial path matching
     for available_file in available_files:
         if available_file.endswith(file_path) or file_path.endswith(available_file):
             return available_file
             
     return None
 
-# Prepare inline comments
+# Prepare inline comments for GraphQL review
 console.rule("[bold cyan]🛠️ Preparing Inline Comments")
-line_comments = []
+review_comments = []
 overflow_comments = []
 MAX_INLINE = 20
 
@@ -184,7 +293,6 @@ for i, v in enumerate(violations):
     matched_file = find_matching_file(raw_file, changed_files.keys())
     if not matched_file:
         console.print(f"[yellow]Violation {i+1}: No matching PR file for {raw_file}[/yellow]")
-        console.print(f"[yellow]  Available files: {list(changed_files.keys())[:3]}...[/yellow]")
         overflow_comments.append(v)
         continue
     
@@ -198,7 +306,6 @@ for i, v in enumerate(violations):
     valid_lines = changed_files[matched_file]['valid_lines']
     if line not in valid_lines:
         console.print(f"[yellow]Violation {i+1}: Line {line} not in valid lines for {matched_file}[/yellow]")
-        console.print(f"[yellow]  Valid lines: {sorted(list(valid_lines))[:10]}...[/yellow]")
         overflow_comments.append(v)
         continue
     
@@ -225,86 +332,121 @@ for i, v in enumerate(violations):
     
     comment_data = {
         "path": matched_file,
-        "line": line,  # Use line instead of position for simplicity
+        "line": line,
         "body": f"🔍 **PMD Analysis**\n\n{markdown_table}"
     }
     
-    line_comments.append(comment_data)
+    review_comments.append(comment_data)
 
-console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} valid inline comment(s), {len(overflow_comments)} overflow."))
+# Limit to 20 comments for GraphQL review
+if len(review_comments) > MAX_INLINE:
+    overflow_from_limit = review_comments[MAX_INLINE:]
+    review_comments = review_comments[:MAX_INLINE]
+    
+    # Convert excess comments to overflow format
+    for comment in overflow_from_limit:
+        overflow_comments.append({
+            "type": "inline_overflow",
+            "comment": comment
+        })
 
-# Post inline comments
-console.rule("[bold green]🚀 Submitting Inline Comments")
-if line_comments:
-    # Limit to first 20 comments as requested
-    comments_to_post = line_comments[:20]
-    
-    # Use individual comment posting with proper rate limiting
-    console.print(f"[yellow]⚠️ Posting {len(comments_to_post)} individual comments with rate limiting...[/yellow]")
-    post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
-    success = 0
-    errors = 0
-    
-    with tqdm(total=len(comments_to_post), desc="Posting Comments", ncols=80) as pbar:
-        for i, comment in enumerate(comments_to_post, 1):
-            # Add commit_id for individual comments
-            comment["commit_id"] = commit_id
-            
-            console.print(f"[dim]Posting comment {i}/{len(comments_to_post)}: {comment['path']}:{comment['line']}[/dim]")
-            
-            response = requests.post(post_url, json=comment, headers=headers)
-            if response.status_code == 201:
-                success += 1
-                console.print(f"[green]✅ Posted comment {i} successfully[/green]")
-            else:
-                errors += 1
-                console.print(f"[red]❌ Failed comment {i}: {response.status_code}[/red]")
-                if response.status_code == 422:
-                    console.print(f"[red]  Error: {response.json()}[/red]")
-                elif response.status_code == 403:
-                    resp_json = response.json()
-                    msg = resp_json.get("message", "")
-                    if "secondary rate limit" in msg.lower():
-                        console.print("[yellow]⚠️ Hit GitHub secondary rate limit. Sleeping 30s…[/yellow]")
-                        time.sleep(30)
-                        continue
-            
-            # Apply rate limiting delays
-            if i % 10 == 0:
-                console.print(f"[cyan]⏱️ Pausing 3 seconds after {i} requests (every 10)[/cyan]")
-                time.sleep(3)
-            elif i % 5 == 0:
-                console.print(f"[cyan]⏱️ Pausing 2 seconds after {i} requests (every 5)[/cyan]")
-                time.sleep(2)
-            else:
-                # Small delay between each request
-                time.sleep(0.5)
-            
-            pbar.update(1)
-    
-    console.print(f"[bold yellow]Individual comment results: {success} success, {errors} errors[/bold yellow]")
-    
-    # Add remaining comments to overflow if we hit the 20 limit
-    if len(line_comments) > 20:
-        remaining_comments = line_comments[20:]
-        console.print(f"[yellow]⚠️ Adding {len(remaining_comments)} comments to overflow (over 20 limit)[/yellow]")
-        overflow_comments.extend([{"type": "inline_overflow", "comment": c} for c in remaining_comments])
+console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(review_comments)} inline comment(s), {len(overflow_comments)} overflow."))
 
-# Overflow comments as one summary comment (if any)
+# Post review with all inline comments using GraphQL
+console.rule("[bold green]🚀 Submitting Review with Inline Comments")
+if review_comments:
+    create_review_mutation = """
+    mutation CreateReview($pullRequestId: ID!, $commitOID: GitObjectID!, $body: String!, $comments: [DraftPullRequestReviewComment!]!) {
+      addPullRequestReview(input: {
+        pullRequestId: $pullRequestId,
+        commitOID: $commitOID,
+        body: $body,
+        event: COMMENT,
+        comments: $comments
+      }) {
+        pullRequestReview {
+          id
+          createdAt
+          comments(first: 100) {
+            totalCount
+            nodes {
+              id
+              path
+              line
+            }
+          }
+        }
+      }
+    }
+    """
+    
+    # Convert comments to GraphQL format
+    graphql_comments = []
+    for comment in review_comments:
+        graphql_comments.append({
+            "path": comment["path"],
+            "line": comment["line"],
+            "body": comment["body"]
+        })
+    
+    review_body = f"🔍 **PMD Analysis Results**\n\nFound {len(review_comments)} code quality issues in this PR."
+    if overflow_comments:
+        review_body += f" {len(overflow_comments)} additional violations are listed in the summary comment below."
+    
+    variables = {
+        "pullRequestId": pr_node_id,
+        "commitOID": head_oid,
+        "body": review_body,
+        "comments": graphql_comments
+    }
+    
+    console.print(f"[dim]Creating review with {len(graphql_comments)} inline comments[/dim]")
+    
+    result = execute_graphql_query(create_review_mutation, variables)
+    
+    if result and result.get("addPullRequestReview"):
+        review_data = result["addPullRequestReview"]["pullRequestReview"]
+        comment_count = review_data["comments"]["totalCount"]
+        console.print(f"[bold green]✅ Successfully created review with {comment_count} inline comments![/bold green]")
+        console.print(f"[dim]Review ID: {review_data['id']}[/dim]")
+    else:
+        console.print("[bold red]❌ Failed to create review with inline comments[/bold red]")
+        
+        # Fallback: Add comments individually (but this defeats the purpose)
+        console.print("[yellow]⚠️ Consider using REST API fallback if needed[/yellow]")
+
+# Post overflow comments as summary
 if overflow_comments:
-    console.rule("[bold magenta]🗄️ Posting Overflow as Table")
+    console.rule("[bold magenta]🗄️ Posting Overflow as Summary Comment")
+    
+    # Create issue comment using GraphQL
+    create_comment_mutation = """
+    mutation CreateIssueComment($subjectId: ID!, $body: String!) {
+      addComment(input: {
+        subjectId: $subjectId,
+        body: $body
+      }) {
+        commentEdge {
+          node {
+            id
+            createdAt
+          }
+        }
+      }
+    }
+    """
+    
     header = "| File | Line | Rule | Severity | Message |\n|------|------|----------|----------|----------|\n"
     body_rows = []
     
     for v in overflow_comments:
         # Handle both regular violations and inline overflow comments
         if v.get("type") == "inline_overflow":
-            # This is an inline comment that exceeded the 20 limit
             comment_data = v["comment"]
             file_path = comment_data["path"]
             line_no = comment_data["line"]
             
-            # Extract from comment body (parse back from markdown)
+            # Extract from comment body
             body = comment_data["body"]
             rule_match = re.search(r'\| Rule\s+\| ([^|]+) \|', body)
             severity_match = re.search(r'\| Severity \| ([^|]+) \|', body)
@@ -316,7 +458,7 @@ if overflow_comments:
             
             body_rows.append(f"| `{file_path}` | {line_no} | {rule} | {severity} | {message} |")
         else:
-            # Regular violation that couldn't be mapped to changed lines
+            # Regular violation
             locs = v.get("locations", [])
             loc = locs[v.get("primaryLocationIndex", 0)] if locs else {}
             file_path = normalize_file_path(loc.get("file", "Unknown"))
@@ -327,10 +469,7 @@ if overflow_comments:
             message = v.get("message", "No message provided")
             url = v.get("resources", [""])[0] if v.get("resources") else ""
             
-            # Make rule a hyperlink if URL is available
             rule_display = f"[{rule}]({url})" if url else rule
-            
-            # Clean up message for table display
             message = str(message).replace("|", "\\|").replace("\n", " ")
             if len(message) > 100:
                 message = message[:97] + "..."
@@ -338,7 +477,6 @@ if overflow_comments:
             body_rows.append(f"| `{file_path}` | {line_no} | {rule_display} | {severity} | {message} |")
     
     overflow_table = header + "\n".join(body_rows)
-    issues_comment_url = f"https://api.github.com/repos/{github_repository}/issues/{pr_number}/comments"
     
     # Count different types of overflow
     regular_overflow = len([v for v in overflow_comments if v.get("type") != "inline_overflow"])
@@ -346,23 +484,26 @@ if overflow_comments:
     
     overflow_title = "⚠️ **PMD Analysis Results**"
     if regular_overflow > 0 and limit_overflow > 0:
-        overflow_title += f" ({regular_overflow} not mapped to changes, {limit_overflow} over 20 comment limit)"
+        overflow_title += f" ({regular_overflow} not mapped to changes, {limit_overflow} over {MAX_INLINE} comment limit)"
     elif regular_overflow > 0:
         overflow_title += f" ({regular_overflow} violations not mapped to changed lines)"
     elif limit_overflow > 0:
-        overflow_title += f" ({limit_overflow} violations over 20 comment limit)"
+        overflow_title += f" ({limit_overflow} violations over {MAX_INLINE} comment limit)"
     
-    overflow_payload = {"body": 
-        f"{overflow_title}\n\n"
-        "The following violations could not be posted as inline comments:\n\n" +
-        overflow_table
+    comment_body = f"{overflow_title}\n\nThe following violations could not be posted as inline comments:\n\n{overflow_table}"
+    
+    variables = {
+        "subjectId": pr_node_id,
+        "body": comment_body
     }
     
-    resp2 = requests.post(issues_comment_url, json=overflow_payload, headers=headers)
-    if resp2.status_code == 201:
-        console.print("[bold green]✅ Overflow table comment posted successfully![/bold green]")
+    result = execute_graphql_query(create_comment_mutation, variables)
+    
+    if result and result.get("addComment"):
+        comment_id = result["addComment"]["commentEdge"]["node"]["id"]
+        console.print(f"[bold green]✅ Posted overflow summary comment![/bold green]")
+        console.print(f"[dim]Comment ID: {comment_id}[/dim]")
     else:
-        console.print(f"[bold red]❌ Failed to post overflow table comment: {resp2.status_code}[/bold red]")
-        console.print_json(data=resp2.json())
+        console.print("[bold red]❌ Failed to post overflow summary comment[/bold red]")
 
 console.rule("[bold cyan]🏁 Done")
