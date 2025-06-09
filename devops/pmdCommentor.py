@@ -338,9 +338,12 @@ for i, v in enumerate(violations):
         f"| Message  | {message} |"
     )
     
+    # Map line to diff position for GraphQL
+    position = changed_files[matched_file]['line_to_position'][line]
     comment_data = {
         "path": matched_file,
         "line": line,
+        "position": position,  # <-- FIX: add position for GraphQL
         "body": f"🔍 **PMD Analysis**\n\n{markdown_table}"
     }
     
