@@ -236,48 +236,59 @@ console.print(Panel.fit(f"[bold yellow]💬 Prepared {len(line_comments)} valid 
 # Post inline comments
 console.rule("[bold green]🚀 Submitting Inline Comments")
 if line_comments:
-    # Use the review API for better reliability
-    review_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/reviews"
+    # Limit to first 20 comments as requested
+    comments_to_post = line_comments[:20]
     
-    # Prepare review with inline comments
-    review_data = {
-        "commit_id": commit_id,
-        "body": f"🔍 **PMD Analysis Results**\n\nFound {len(line_comments)} code quality issues in this PR.",
-        "event": "COMMENT",
-        "comments": line_comments
-    }
+    # Use individual comment posting with proper rate limiting
+    console.print(f"[yellow]⚠️ Posting {len(comments_to_post)} individual comments with rate limiting...[/yellow]")
+    post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
+    success = 0
+    errors = 0
     
-    console.print(f"[dim]Posting review with {len(line_comments)} inline comments[/dim]")
-    response = requests.post(review_url, json=review_data, headers=headers)
-    
-    if response.status_code == 200:
-        console.print(f"[bold green]✅ Successfully posted review with {len(line_comments)} inline comments![/bold green]")
-    else:
-        console.print(f"[bold red]❌ Failed to post review: {response.status_code}[/bold red]")
-        console.print_json(data=response.json())
-        
-        # Fallback: try posting individual comments
-        console.print("[yellow]⚠️ Falling back to individual comment posting...[/yellow]")
-        post_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}/comments"
-        success = 0
-        errors = 0
-        
-        for i, comment in enumerate(line_comments):
+    with tqdm(total=len(comments_to_post), desc="Posting Comments", ncols=80) as pbar:
+        for i, comment in enumerate(comments_to_post, 1):
             # Add commit_id for individual comments
             comment["commit_id"] = commit_id
+            
+            console.print(f"[dim]Posting comment {i}/{len(comments_to_post)}: {comment['path']}:{comment['line']}[/dim]")
             
             response = requests.post(post_url, json=comment, headers=headers)
             if response.status_code == 201:
                 success += 1
-                console.print(f"[green]✅ Posted individual comment {i+1}[/green]")
+                console.print(f"[green]✅ Posted comment {i} successfully[/green]")
             else:
                 errors += 1
-                console.print(f"[red]❌ Failed individual comment {i+1}: {response.status_code}[/red]")
+                console.print(f"[red]❌ Failed comment {i}: {response.status_code}[/red]")
                 if response.status_code == 422:
                     console.print(f"[red]  Error: {response.json()}[/red]")
-            time.sleep(1)
-        
-        console.print(f"[bold yellow]Fallback results: {success} success, {errors} errors[/bold yellow]")
+                elif response.status_code == 403:
+                    resp_json = response.json()
+                    msg = resp_json.get("message", "")
+                    if "secondary rate limit" in msg.lower():
+                        console.print("[yellow]⚠️ Hit GitHub secondary rate limit. Sleeping 30s…[/yellow]")
+                        time.sleep(30)
+                        continue
+            
+            # Apply rate limiting delays
+            if i % 10 == 0:
+                console.print(f"[cyan]⏱️ Pausing 3 seconds after {i} requests (every 10)[/cyan]")
+                time.sleep(3)
+            elif i % 5 == 0:
+                console.print(f"[cyan]⏱️ Pausing 2 seconds after {i} requests (every 5)[/cyan]")
+                time.sleep(2)
+            else:
+                # Small delay between each request
+                time.sleep(0.5)
+            
+            pbar.update(1)
+    
+    console.print(f"[bold yellow]Individual comment results: {success} success, {errors} errors[/bold yellow]")
+    
+    # Add remaining comments to overflow if we hit the 20 limit
+    if len(line_comments) > 20:
+        remaining_comments = line_comments[20:]
+        console.print(f"[yellow]⚠️ Adding {len(remaining_comments)} comments to overflow (over 20 limit)[/yellow]")
+        overflow_comments.extend([{"type": "inline_overflow", "comment": c} for c in remaining_comments])
 
 # Overflow comments as one summary comment (if any)
 if overflow_comments:
@@ -286,32 +297,64 @@ if overflow_comments:
     body_rows = []
     
     for v in overflow_comments:
-        # Extract violation details
-        locs = v.get("locations", [])
-        loc = locs[v.get("primaryLocationIndex", 0)] if locs else {}
-        file_path = normalize_file_path(loc.get("file", "Unknown"))
-        line_no = loc.get("startLine", "?")
-        
-        rule = v.get("rule", "Unknown Rule")
-        severity = v.get("severity", "Unknown Severity")
-        message = v.get("message", "No message provided")
-        url = v.get("resources", [""])[0] if v.get("resources") else ""
-        
-        # Make rule a hyperlink if URL is available
-        rule_display = f"[{rule}]({url})" if url else rule
-        
-        # Clean up message for table display
-        message = str(message).replace("|", "\\|").replace("\n", " ")
-        if len(message) > 100:
-            message = message[:97] + "..."
-        
-        body_rows.append(f"| `{file_path}` | {line_no} | {rule_display} | {severity} | {message} |")
+        # Handle both regular violations and inline overflow comments
+        if v.get("type") == "inline_overflow":
+            # This is an inline comment that exceeded the 20 limit
+            comment_data = v["comment"]
+            file_path = comment_data["path"]
+            line_no = comment_data["line"]
+            
+            # Extract from comment body (parse back from markdown)
+            body = comment_data["body"]
+            rule_match = re.search(r'\| Rule\s+\| ([^|]+) \|', body)
+            severity_match = re.search(r'\| Severity \| ([^|]+) \|', body)
+            message_match = re.search(r'\| Message\s+\| ([^|]+) \|', body)
+            
+            rule = rule_match.group(1).strip() if rule_match else "Unknown Rule"
+            severity = severity_match.group(1).strip() if severity_match else "Unknown Severity"
+            message = message_match.group(1).strip() if message_match else "No message"
+            
+            body_rows.append(f"| `{file_path}` | {line_no} | {rule} | {severity} | {message} |")
+        else:
+            # Regular violation that couldn't be mapped to changed lines
+            locs = v.get("locations", [])
+            loc = locs[v.get("primaryLocationIndex", 0)] if locs else {}
+            file_path = normalize_file_path(loc.get("file", "Unknown"))
+            line_no = loc.get("startLine", "?")
+            
+            rule = v.get("rule", "Unknown Rule")
+            severity = v.get("severity", "Unknown Severity")
+            message = v.get("message", "No message provided")
+            url = v.get("resources", [""])[0] if v.get("resources") else ""
+            
+            # Make rule a hyperlink if URL is available
+            rule_display = f"[{rule}]({url})" if url else rule
+            
+            # Clean up message for table display
+            message = str(message).replace("|", "\\|").replace("\n", " ")
+            if len(message) > 100:
+                message = message[:97] + "..."
+            
+            body_rows.append(f"| `{file_path}` | {line_no} | {rule_display} | {severity} | {message} |")
     
     overflow_table = header + "\n".join(body_rows)
     issues_comment_url = f"https://api.github.com/repos/{github_repository}/issues/{pr_number}/comments"
+    
+    # Count different types of overflow
+    regular_overflow = len([v for v in overflow_comments if v.get("type") != "inline_overflow"])
+    limit_overflow = len([v for v in overflow_comments if v.get("type") == "inline_overflow"])
+    
+    overflow_title = "⚠️ **PMD Analysis Results**"
+    if regular_overflow > 0 and limit_overflow > 0:
+        overflow_title += f" ({regular_overflow} not mapped to changes, {limit_overflow} over 20 comment limit)"
+    elif regular_overflow > 0:
+        overflow_title += f" ({regular_overflow} violations not mapped to changed lines)"
+    elif limit_overflow > 0:
+        overflow_title += f" ({limit_overflow} violations over 20 comment limit)"
+    
     overflow_payload = {"body": 
-        f"⚠️ **PMD Analysis Results** ({len(overflow_comments)} violations not mapped to changed lines)\n\n"
-        "The following violations could not be posted inline because they don't correspond to lines changed in this PR:\n\n" +
+        f"{overflow_title}\n\n"
+        "The following violations could not be posted as inline comments:\n\n" +
         overflow_table
     }
     
