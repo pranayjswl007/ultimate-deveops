@@ -452,17 +452,9 @@ if overflow_comments:
         if v.get("type") == "inline_overflow":
             comment_data = v["comment"]
             file_path = comment_data["path"]
-            position = comment_data["position"]
             
-            # For display purposes, try to map position back to line number
-            # This is approximate since we're going backwards
-            line_no = "?"
-            for filename, data in changed_files.items():
-                if filename == file_path:
-                    for line_num, pos in data['line_to_position'].items():
-                        if pos == position:
-                            line_no = line_num
-                            break
+            # Use the stored line number for display
+            line_no = comment_data.get("line", "?")
             
             # Extract from comment body
             body = comment_data["body"]
