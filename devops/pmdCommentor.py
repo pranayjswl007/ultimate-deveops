@@ -197,25 +197,46 @@ for file_data in pr_files:
             'valid_lines': set()
         }
         
-        # Parse patch to find lines that can receive comments
+# Build file mapping with line numbers and their diff positions
+changed_files = {}
+for file_data in pr_files:
+    filename = file_data['filename']  # REST API uses 'filename' not 'path'
+    # Only process files that have changes (not just renamed/moved)
+    if file_data['status'] in ['added', 'modified'] and file_data.get('patch'):
+        changed_files[filename] = {
+            'patch': file_data['patch'],
+            'valid_lines': set(),
+            'line_to_position': {}  # Maps line number to diff position
+        }
+        
+        # Parse patch to find lines that can receive comments and their positions
         patch_lines = file_data['patch'].split('\n')
         current_line = 0
+        diff_position = 0
         
-        for line in patch_lines:
-            if line.startswith('@@'):
+        for patch_line in patch_lines:
+            if patch_line.startswith('@@'):
                 # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
-                match = re.match(r'@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@', line)
+                match = re.match(r'@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@', patch_line)
                 if match:
                     current_line = int(match.group(1))
-            elif line.startswith('+') and not line.startswith('+++'):
+                # Hunk headers don't count as diff positions for comments
+            elif patch_line.startswith('+') and not patch_line.startswith('+++'):
                 # This is a new line that can receive comments
+                diff_position += 1
                 changed_files[filename]['valid_lines'].add(current_line)
+                changed_files[filename]['line_to_position'][current_line] = diff_position
                 current_line += 1
-            elif line.startswith(' '):
+            elif patch_line.startswith(' '):
                 # Context line
+                diff_position += 1
                 changed_files[filename]['valid_lines'].add(current_line)
+                changed_files[filename]['line_to_position'][current_line] = diff_position
                 current_line += 1
-            # Lines starting with '-' don't increment current_line
+            elif patch_line.startswith('-'):
+                # Deleted line - contributes to diff position but not to new line numbers
+                diff_position += 1
+            # Other lines (like file headers) don't affect position or line numbers
 
 console.print(f"[bold green]✅ Processed {len(changed_files)} files with changes[/bold green]")
 
@@ -372,7 +393,7 @@ if review_comments:
     for comment in review_comments:
         graphql_comments.append({
             "path": comment["path"],
-            "line": comment["line"],
+            "position": comment["position"],  # Use position for GraphQL
             "body": comment["body"]
         })
     
@@ -431,7 +452,17 @@ if overflow_comments:
         if v.get("type") == "inline_overflow":
             comment_data = v["comment"]
             file_path = comment_data["path"]
-            line_no = comment_data["line"]
+            position = comment_data["position"]
+            
+            # For display purposes, try to map position back to line number
+            # This is approximate since we're going backwards
+            line_no = "?"
+            for filename, data in changed_files.items():
+                if filename == file_path:
+                    for line_num, pos in data['line_to_position'].items():
+                        if pos == position:
+                            line_no = line_num
+                            break
             
             # Extract from comment body
             body = comment_data["body"]
