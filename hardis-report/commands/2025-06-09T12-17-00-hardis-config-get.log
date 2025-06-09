@@ -1,0 +1,2 @@
+--level project --json--level user --json[sfdx-hardis] {}
+[sfdx-hardis] {"installedApps":["git"]}
