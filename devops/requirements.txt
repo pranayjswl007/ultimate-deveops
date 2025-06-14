@@ -1,3 +1,6 @@
 rich
 tqdm
 requests
+lxml
+PyYAML
+beautifulsoup4
