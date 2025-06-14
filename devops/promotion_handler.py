@@ -92,7 +92,48 @@ def delete_branch(repo, branch_name, gh_pat):
     else:
         print(f"⚠️ Warning: Could not delete branch {branch_name}: {response.status_code}")
 
-def create_promotion_pr(repo, head, base, source_pr, gh_pat, has_conflict):
+def create_promotion_branch(repo, source_branch, promo_branch, gh_pat):
+    """Create or recreate the promotion branch from the source branch"""
+    
+    # First, get the latest commit SHA from the source branch
+    response = requests.get(
+        f"https://api.github.com/repos/{repo}/git/refs/heads/{source_branch}",
+        headers=get_headers(gh_pat)
+    )
+    
+    if response.status_code != 200:
+        fail(f"Failed to get source branch {source_branch}", response)
+    
+    source_sha = response.json()["object"]["sha"]
+    print(f"ℹ️ Source branch {source_branch} SHA: {source_sha}")
+    
+    # Try to update existing branch first (in case it exists)
+    update_response = requests.patch(
+        f"https://api.github.com/repos/{repo}/git/refs/heads/{promo_branch}",
+        headers=get_headers(gh_pat),
+        json={"sha": source_sha}
+    )
+    
+    if update_response.status_code == 200:
+        print(f"✅ Updated existing promotion branch: {promo_branch}")
+        return
+    
+    # If update failed, create new branch
+    create_response = requests.post(
+        f"https://api.github.com/repos/{repo}/git/refs",
+        headers=get_headers(gh_pat),
+        json={
+            "ref": f"refs/heads/{promo_branch}",
+            "sha": source_sha
+        }
+    )
+    
+    if create_response.status_code == 201:
+        print(f"✅ Created promotion branch: {promo_branch}")
+    else:
+        fail(f"Failed to create promotion branch {promo_branch}", create_response)
+
+def create_promotion_pr(repo, head, base, source_pr, source_branch, gh_pat, has_conflict):
     if head.count("promotion") > 1:
         fail("🚨 Recursion detected in promotion branch name. Aborting.")
 
@@ -108,6 +149,9 @@ def create_promotion_pr(repo, head, base, source_pr, gh_pat, has_conflict):
         
         # Delete the old promotion branch to ensure clean state
         delete_branch(repo, head, gh_pat)
+
+    # Create/recreate the promotion branch from source
+    create_promotion_branch(repo, source_branch, head, gh_pat)
 
     # Create a new promotion PR
     conflict_note = (
@@ -237,18 +281,21 @@ if __name__ == "__main__":
         promo_branch = os.environ["PROMO_BRANCH"]
         base_branch = os.environ["BASE_BRANCH"]
         original_pr = os.environ["SOURCE_PR"]
-        feature_branch = os.environ.get("FEATURE_BRANCH")  # Source branch name
+        source_branch = os.environ.get("FEATURE_BRANCH")  # Source branch name
         gh_pat = os.environ["GH_PAT"]
 
+        if not source_branch:
+            fail("Missing FEATURE_BRANCH environment variable")
+
         # Create/recreate promotion PR (this handles closing existing ones)
-        promotion_pr_number = create_promotion_pr(repo, promo_branch, base_branch, original_pr, gh_pat, has_conflict=False)
+        promotion_pr_number = create_promotion_pr(repo, promo_branch, base_branch, original_pr, source_branch, gh_pat, has_conflict=False)
         
         # Check for conflicts
         has_conflict = check_conflicts(repo, promotion_pr_number, gh_pat)
         
         # Close original PR and delete feature branch
-        if feature_branch:
-            close_original_pr_and_feature_branch(repo, original_pr, feature_branch, promo_branch, promotion_pr_number, gh_pat, has_conflict)
+        if source_branch:
+            close_original_pr_and_feature_branch(repo, original_pr, source_branch, promo_branch, promotion_pr_number, gh_pat, has_conflict)
         else:
             print("⚠️ Warning: FEATURE_BRANCH not provided, skipping branch deletion")
 
