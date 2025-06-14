@@ -21,7 +21,7 @@ class EnvironmentVariableReplacer:
     def load_config(self):
         """Load the single XPath configuration file"""
         try:
-            config_file = self.config_dir / "xpath-config.yml"
+            config_file = self.config_dir / "environment.yml"
             
             if not config_file.exists():
                 logger.error(f"Configuration file not found: {config_file}")
