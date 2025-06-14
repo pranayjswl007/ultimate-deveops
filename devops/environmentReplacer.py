@@ -158,7 +158,11 @@ class EnvironmentVariableReplacer:
 def main():
    
     replacer = EnvironmentVariableReplacer()
-    replacer.process_environment(target_env)
+    #print alll environment variablle in Python
+    logger.info("Environment Variables:")
+    for key, value in os.environ.items():
+        logger.info(f"{key}: {value}")  
+    replacer.process_environment()
 
 
 if __name__ == "__main__":
