@@ -38,7 +38,7 @@ class EnvironmentVariableReplacer:
             sys.exit(1)
     
     def get_required_variables(self, config):
-        """Extract all variable names from the configuration"""
+        """Extract environment variable names (${VARIABLE_NAME}) from the configuration"""
         variables = set()
         
         for replacement in config.get('xpath_replacements', []):
@@ -49,34 +49,42 @@ class EnvironmentVariableReplacer:
         return variables
     
     def load_variables(self, required_variables):
-        """Load all variables from environment (GitHub handles secrets vs variables automatically)"""
+        """Load variables from environment (only for ${VARIABLE_NAME} placeholders)"""
         variables = {}
         missing = []
+        
+        if not required_variables:
+            logger.info("No environment variables required (using direct YAML values)")
+            return variables
         
         for var_name in required_variables:
             value = os.getenv(var_name)
             if value:
                 variables[var_name] = value
-                logger.info(f"✓ Loaded: {var_name}")
+                logger.info(f"✓ Loaded environment variable: {var_name}")
             else:
                 missing.append(var_name)
         
         if missing:
-            logger.error(f"Missing variables: {', '.join(missing)}")
+            logger.error(f"Missing environment variables: {', '.join(missing)}")
             logger.info("Make sure variables are set in GitHub Environment:")
             logger.info("- Use Secrets for sensitive data (API keys, passwords)")
-            logger.info("- Use Variables for non-sensitive data (URLs, emails)")
             sys.exit(1)
         
         return variables
     
     def replace_variables_in_value(self, value, variables):
-        """Replace ${VARIABLE_NAME} with actual values"""
+        """Replace ${VARIABLE_NAME} with actual values, or return value as-is if no placeholders"""
+        # If no placeholders, return the value directly from YAML
+        if '${' not in str(value):
+            return str(value)
+        
+        # Replace environment variable placeholders
         def replace_variable(match):
             var_name = match.group(1)
             return variables.get(var_name, match.group(0))
         
-        return re.sub(r'\$\{([^}]+)\}', replace_variable, value)
+        return re.sub(r'\$\{([^}]+)\}', replace_variable, str(value))
     
     def process_file(self, file_path, replacements, variables):
         """Process a single XML file"""
@@ -127,11 +135,14 @@ class EnvironmentVariableReplacer:
         # Load environment-specific config file
         config = self.load_config(target_env)  # Pass target_env here
         
-        # Get required variables
+        # Get required environment variables (only for ${} placeholders)
         required_variables = self.get_required_variables(config)
-        logger.info(f"Required variables: {', '.join(sorted(required_variables))}")
+        if required_variables:
+            logger.info(f"Required environment variables: {', '.join(sorted(required_variables))}")
+        else:
+            logger.info("Using direct YAML values (no environment variables needed)")
         
-        # Load variables from environment
+        # Load environment variables (empty if none required)
         variables = self.load_variables(required_variables)
         
         # Check if we have changes to process
