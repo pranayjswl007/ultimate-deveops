@@ -12,16 +12,17 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 class EnvironmentVariableReplacer:
-    def __init__(self, config_dir=""):
+    def __init__(self, config_dir="environments"):  # Remove target_env from __init__
         self.config_dir = Path(config_dir)
         self.namespaces = {
             'ns': 'http://soap.sforce.com/2006/04/metadata'
         }
     
-    def load_config(self):
-        """Load the single XPath configuration file"""
+    def load_config(self, target_env):  # Add target_env parameter here
+        """Load the environment-specific YAML configuration file"""
         try:
-            config_file = self.config_dir / "environment.yml"
+            env_file = f"{target_env}.yml"
+            config_file = self.config_dir / env_file
             
             if not config_file.exists():
                 logger.error(f"Configuration file not found: {config_file}")
@@ -118,13 +119,13 @@ class EnvironmentVariableReplacer:
         except Exception as e:
             logger.error(f"  ✗ Error processing {file_path}: {str(e)}")
     
-    def process_environment(self):
+    def process_environment(self, target_env):
         """Main processing method"""
-        logger.info(f"Starting replacement for environment")
+        logger.info(f"Starting replacement for environment: {target_env}")
         logger.info("=" * 50)
         
-        # Load single config file
-        config = self.load_config()
+        # Load environment-specific config file
+        config = self.load_config(target_env)  # Pass target_env here
         
         # Get required variables
         required_variables = self.get_required_variables(config)
@@ -156,13 +157,13 @@ class EnvironmentVariableReplacer:
 
 
 def main():
-   
+    if len(sys.argv) != 2:
+        logger.error('Usage: python replace_env_vars.py <environment>')  # Fixed script name
+        sys.exit(1)
+    
+    target_env = sys.argv[1]
     replacer = EnvironmentVariableReplacer()
-    #print alll environment variablle in Python
-    logger.info("Environment Variables:")
-    for key, value in os.environ.items():
-        logger.info(f"{key}: {value}")  
-    replacer.process_environment()
+    replacer.process_environment(target_env)  # Pass target_env here
 
 
 if __name__ == "__main__":
