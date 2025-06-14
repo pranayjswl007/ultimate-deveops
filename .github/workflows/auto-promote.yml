@@ -73,6 +73,7 @@ jobs:
         run: python ./devops/promotion_handler.py
         env:
           PROMO_BRANCH: ${{ steps.create-branch.outputs.promo_branch }}
+          FEATURE_BRANCH: ${{ inputs.head-ref }}
           BASE_BRANCH: ${{ inputs.base-ref }}
           SOURCE_PR: ${{ inputs.pr-number }}
           REPO: ${{ inputs.repository }}
