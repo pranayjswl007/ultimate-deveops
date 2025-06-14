@@ -118,9 +118,9 @@ class EnvironmentVariableReplacer:
         except Exception as e:
             logger.error(f"  ✗ Error processing {file_path}: {str(e)}")
     
-    def process_environment(self, target_env):
+    def process_environment(self):
         """Main processing method"""
-        logger.info(f"Starting replacement for environment: {target_env}")
+        logger.info(f"Starting replacement for environment")
         logger.info("=" * 50)
         
         # Load single config file
@@ -156,11 +156,7 @@ class EnvironmentVariableReplacer:
 
 
 def main():
-    if len(sys.argv) != 2:
-        logger.error('Usage: python replace_env_vars.py <environment>')
-        sys.exit(1)
-    
-    target_env = sys.argv[1]
+   
     replacer = EnvironmentVariableReplacer()
     replacer.process_environment(target_env)
 
