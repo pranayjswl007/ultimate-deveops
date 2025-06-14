@@ -18,18 +18,18 @@ class EnvironmentVariableReplacer:
             'ns': 'http://soap.sforce.com/2006/04/metadata'
         }
     
-    def load_config(self, target_env):
-        """Load the YAML configuration file for a specific environment"""
+    def load_config(self):
+        """Load the single XPath configuration file"""
         try:
-            env_config_file = self.config_dir / f"{target_env}.yml"
+            config_file = self.config_dir / "xpath-config.yml"
             
-            if not env_config_file.exists():
-                logger.error(f"Configuration file not found: {env_config_file}")
+            if not config_file.exists():
+                logger.error(f"Configuration file not found: {config_file}")
                 sys.exit(1)
             
-            with open(env_config_file, 'r', encoding='utf-8') as file:
+            with open(config_file, 'r', encoding='utf-8') as file:
                 config = yaml.safe_load(file)
-                logger.info(f"Configuration loaded from: {env_config_file}")
+                logger.info(f"Configuration loaded from: {config_file}")
                 return config
                 
         except Exception as e:
@@ -48,7 +48,7 @@ class EnvironmentVariableReplacer:
         return variables
     
     def load_variables(self, required_variables):
-        """Load variables from environment variables (both secrets and regular env vars)"""
+        """Load all variables from environment (GitHub handles secrets vs variables automatically)"""
         variables = {}
         missing = []
         
@@ -56,13 +56,15 @@ class EnvironmentVariableReplacer:
             value = os.getenv(var_name)
             if value:
                 variables[var_name] = value
-                # Don't log the actual value for security (could be a secret)
-                logger.info(f"✓ Loaded variable: {var_name}")
+                logger.info(f"✓ Loaded: {var_name}")
             else:
                 missing.append(var_name)
         
         if missing:
             logger.error(f"Missing variables: {', '.join(missing)}")
+            logger.info("Make sure variables are set in GitHub Environment:")
+            logger.info("- Use Secrets for sensitive data (API keys, passwords)")
+            logger.info("- Use Variables for non-sensitive data (URLs, emails)")
             sys.exit(1)
         
         return variables
@@ -121,10 +123,10 @@ class EnvironmentVariableReplacer:
         logger.info(f"Starting replacement for environment: {target_env}")
         logger.info("=" * 50)
         
-        # Load config
-        config = self.load_config(target_env)
+        # Load single config file
+        config = self.load_config()
         
-        # Get required variables (both secrets and regular env vars)
+        # Get required variables
         required_variables = self.get_required_variables(config)
         logger.info(f"Required variables: {', '.join(sorted(required_variables))}")
         
