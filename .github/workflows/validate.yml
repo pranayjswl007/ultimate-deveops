@@ -106,10 +106,10 @@ jobs:
         run: |
           python3 devops/pmdCommentor.py
 
-      # - name: "Apply environment-specific variable replacements"
-      #   run: |
-      #     # Python script automatically discovers and uses all secrets from the config file
-      #     python3 devops/environmentReplacer.py ${{ inputs.environment-name }}
+      - name: "Apply environment-specific variable replacements"
+        run: |
+          # Python script automatically discovers and uses all secrets from the config file
+          python3 devops/environmentReplacer.py ${{ inputs.environment-name }}
 
       - name: "Zip delta package"
         run: |
