@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 class EnvironmentVariableReplacer:
-    def __init__(self, config_dir="environments"):
+    def __init__(self, config_dir=""):
         self.config_dir = Path(config_dir)
         self.namespaces = {
             'ns': 'http://soap.sforce.com/2006/04/metadata'
